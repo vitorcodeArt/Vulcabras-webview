@@ -2,8 +2,28 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Catálogo de Produtos - Mizuno</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Catálogo - Mizuno</title>
+
+    <!-- Zendesk Webview SDK -->
+    <script>
+      (function (d, s, id) {
+        var js;
+        var fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) return;
+        js = d.createElement(s);
+        js.id = id;
+        js.src = "https://static.zdassets.com/conversation-extensions/latest/sdk.js";
+        fjs.parentNode.insertBefore(js, fjs);
+      })(document, "script", "WebviewSdkScript");
+
+      window.webviewSdkInit = function (WebviewSdk) {
+        window.WebviewSdk = WebviewSdk;
+        if (WebviewSdk.hasFeature("setTitle")) {
+          WebviewSdk.setTitle("Catálogo Mizuno");
+        }
+      };
+    </script>
 
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -24,9 +44,9 @@
               },
             },
             boxShadow: {
-              soft: "0 4px 20px -2px rgba(0, 0, 0, 0.05)",
-              card: "0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04)",
-              glow: "0 10px 25px -5px rgba(37, 99, 235, 0.25)",
+              soft: "0 2px 12px -2px rgba(0, 0, 0, 0.06)",
+              card: "0 8px 20px -4px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.04)",
+              glow: "0 8px 20px -4px rgba(37, 99, 235, 0.35)",
             },
           },
         },
@@ -41,272 +61,231 @@
     <!-- Catálogo CSS Custom -->
     <link rel="stylesheet" href="../css/catalog.css" />
   </head>
-  <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
-    <!-- Header -->
-    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200/80 shadow-sm">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="flex items-center justify-between h-16 sm:h-20">
-          <div class="flex items-center space-x-3">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <i data-lucide="shopping-bag" class="w-5 h-5"></i>
-            </div>
-            <div>
-              <div class="flex items-center space-x-2">
-                <span class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">Mizuno</span>
-                <span class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-700 rounded-full">Catálogo</span>
-              </div>
-              <p class="text-xs text-slate-500 hidden sm:block">Explore os melhores produtos e lançamentos</p>
-            </div>
-          </div>
-
-          <a
-            href="/"
-            class="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:text-blue-600 bg-slate-100/80 hover:bg-blue-50 rounded-xl transition-all duration-200 shadow-sm"
+  <body class="bg-slate-50 text-slate-800 antialiased font-sans min-h-screen flex flex-col items-center justify-start select-none">
+    <!-- Widget App Shell (~400px width limit) -->
+    <div class="w-full max-w-[440px] min-h-screen bg-slate-50 flex flex-col relative shadow-sm border-x border-slate-200/60">
+      <!-- Top Bar Header -->
+      <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 px-4 py-3 border-b border-slate-200/80 flex items-center justify-between h-14 shrink-0 shadow-sm">
+        <div class="flex items-center gap-2.5">
+          <!-- Back Button (mostrado dinamicamente) -->
+          <button
+            id="headerBackBtn"
+            class="hidden w-8 h-8 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 items-center justify-center transition-colors cursor-pointer"
+            aria-label="Voltar"
           >
             <i data-lucide="arrow-left" class="w-4 h-4"></i>
-            <span>Voltar</span>
-          </a>
-        </div>
-      </div>
-    </header>
+          </button>
 
-    <!-- Main Content -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-      <!-- Seção de Categorias -->
-      <section class="mb-10">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-2">
-          <div>
-            <div class="flex items-center gap-2 text-blue-600 text-sm font-semibold uppercase tracking-wider mb-1">
-              <i data-lucide="layout-grid" class="w-4 h-4"></i>
-              <span>Navegação</span>
+          <!-- Logo & Título -->
+          <div class="flex items-center gap-2" id="headerBrand">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
+              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
             </div>
-            <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Categorias em Destaque</h2>
+            <span id="headerTitle" class="font-bold text-base text-slate-900 tracking-tight">Catálogo Mizuno</span>
           </div>
-          <p class="text-sm text-slate-500">Selecione uma categoria para visualizar os produtos</p>
         </div>
 
-        <div id="categoriesContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
-          <!-- Botões de categorias carregados dinamicamente com Tailwind -->
-        </div>
-      </section>
+        <span id="headerBadge" class="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"> Oficial </span>
+      </header>
 
-      <!-- Seção de Produtos (Carrossel) -->
-      <section id="productsSection" class="mb-12 hidden animate-fadeIn">
-        <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-100">
-          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-5 border-b border-slate-100 gap-4">
-            <div class="flex items-center gap-3">
-              <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <i data-lucide="sparkles" class="w-5 h-5"></i>
-              </div>
-              <div>
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mostrando categoria</span>
-                <h2 id="categoryTitle" class="text-xl sm:text-2xl font-bold text-slate-900"></h2>
-              </div>
+      <!-- Main Content Container -->
+      <main class="flex-1 p-4 flex flex-col justify-start overflow-y-auto">
+        <!-- ========================================== -->
+        <!-- VIEW 1: SELEÇÃO DE CATEGORIAS              -->
+        <!-- ========================================== -->
+        <section id="categoriesSection" class="w-full animate-fadeIn">
+          <div class="mb-4">
+            <div class="flex items-center gap-1.5 text-blue-600 text-xs font-bold uppercase tracking-wider mb-1">
+              <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
+              <span>Categorias</span>
+            </div>
+            <h2 class="text-xl font-extrabold text-slate-900 leading-tight">Escolha o que procura</h2>
+            <p class="text-xs text-slate-500 mt-0.5">Selecione uma categoria para ver os modelos</p>
+          </div>
+
+          <div id="categoriesContainer" class="grid grid-cols-2 gap-2.5">
+            <!-- Categorias renderizadas dinamicamente via JS -->
+          </div>
+        </section>
+
+        <!-- ========================================== -->
+        <!-- VIEW 2: CARROSSEL DE PRODUTOS              -->
+        <!-- ========================================== -->
+        <section id="productsSection" class="w-full hidden animate-fadeIn flex-1 flex flex-col">
+          <!-- Top bar da categoria -->
+          <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/80">
+            <div>
+              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">Categoria</span>
+              <h3 id="categoryTitle" class="text-lg font-bold text-slate-900 leading-tight"></h3>
             </div>
             <button
               id="clearCategoryBtn"
-              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all duration-200 border border-slate-200 hover:border-blue-200"
+              class="text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100 flex items-center gap-1 transition-colors cursor-pointer"
             >
-              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-              <span>Trocar categoria</span>
+              <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+              <span>Categorias</span>
             </button>
           </div>
 
-          <!-- Carrossel com Swiper -->
-          <div class="relative px-2 sm:px-6">
-            <div class="swiper productCarousel !pb-12 !pt-2">
+          <!-- Swiper Container -->
+          <div class="relative w-full flex-1 flex flex-col justify-center">
+            <div class="swiper productCarousel w-full !pb-8 !pt-1">
               <div class="swiper-wrapper" id="productsCarousel">
-                <!-- Produtos carregados dinamicamente -->
+                <!-- Cards renderizados dinamicamente via JS -->
               </div>
-              <div class="swiper-pagination !bottom-2"></div>
+              <div class="swiper-pagination !bottom-1"></div>
             </div>
 
-            <!-- Botões Customizados do Swiper -->
+            <!-- Setas de navegação do Swiper -->
             <button
-              class="swiper-button-prev-custom absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 sm:-translate-x-4 z-10 w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-600 rounded-full shadow-lg border border-slate-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+              class="swiper-button-prev-custom absolute left-1 top-1/2 -translate-y-1/2 z-10 w-9 h-9 bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 rounded-full shadow-md border border-slate-200/80 flex items-center justify-center transition-all cursor-pointer"
+              aria-label="Anterior"
             >
-              <i data-lucide="chevron-left" class="w-5 h-5"></i>
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
             </button>
             <button
-              class="swiper-button-next-custom absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 sm:translate-x-4 z-10 w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-600 rounded-full shadow-lg border border-slate-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+              class="swiper-button-next-custom absolute right-1 top-1/2 -translate-y-1/2 z-10 w-9 h-9 bg-white/95 hover:bg-white text-slate-700 hover:text-blue-600 rounded-full shadow-md border border-slate-200/80 flex items-center justify-center transition-all cursor-pointer"
+              aria-label="Próximo"
             >
-              <i data-lucide="chevron-right" class="w-5 h-5"></i>
+              <i data-lucide="chevron-right" class="w-4 h-4"></i>
             </button>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Seção de Detalhes do Produto -->
-      <section id="detailsSection" class="mb-12 hidden animate-fadeIn">
-        <div class="mb-6 flex items-center justify-between">
-          <button
-            id="backToCarouselBtn"
-            class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-600 font-semibold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-200"
-          >
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-            <span>Voltar ao catálogo</span>
-          </button>
-        </div>
+        <!-- ========================================== -->
+        <!-- VIEW 3: DETALHES DO PRODUTO                -->
+        <!-- ========================================== -->
+        <section id="detailsSection" class="w-full hidden animate-fadeIn flex-1 flex flex-col">
+          <!-- Back Bar -->
+          <div class="flex items-center justify-between mb-3 pb-2 border-b border-slate-200/80">
+            <button
+              id="backToCarouselBtn"
+              class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-xs transition-colors cursor-pointer"
+            >
+              <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+              <span>Voltar aos produtos</span>
+            </button>
+            <span id="productBrand" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200"> Mizuno </span>
+          </div>
 
-        <div class="bg-white rounded-3xl p-6 sm:p-10 shadow-card border border-slate-100">
-          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-            <!-- Imagens do Produto (Col 7) -->
-            <div class="lg:col-span-7 flex flex-col gap-5">
-              <!-- Imagem Principal -->
-              <div
-                class="relative bg-gradient-to-b from-slate-50 to-slate-100/60 rounded-2xl p-6 sm:p-8 flex items-center justify-center border border-slate-200/70 overflow-hidden shadow-inner group min-h-[350px] sm:min-h-[460px]"
-              >
-                <img
-                  id="mainImage"
-                  src=""
-                  alt="Imagem principal do produto"
-                  class="max-h-[320px] sm:max-h-[400px] w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-105"
-                />
+          <!-- Product Card Container -->
+          <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-100 flex flex-col gap-3.5 flex-1">
+            <!-- Imagem Principal -->
+            <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/70 rounded-xl p-3 flex items-center justify-center border border-slate-200/70 h-48 overflow-hidden group">
+              <img id="mainImage" src="" alt="Produto" class="max-h-44 w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-200 group-hover:scale-105" />
+            </div>
+
+            <!-- Miniaturas (se houver mais de uma foto) -->
+            <div id="thumbnailsWrapper" class="overflow-hidden">
+              <div class="flex gap-2 overflow-x-auto pb-1 scrollbar-thin" id="thumbnailsContainer">
+                <!-- Miniaturas via JS -->
               </div>
+            </div>
 
-              <!-- Miniaturas de Imagens -->
+            <!-- Nome & Preço -->
+            <div>
+              <h1 id="productName" class="text-base font-extrabold text-slate-900 leading-snug line-clamp-2"></h1>
+              <div id="productPriceContainer" class="mt-1 flex items-baseline gap-2">
+                <span id="productPrice" class="text-lg font-black text-blue-700"></span>
+                <span id="productListPrice" class="text-xs text-slate-400 line-through hidden"></span>
+              </div>
+            </div>
+
+            <!-- Descrição Curta (Colapsável) -->
+            <div class="bg-slate-50 rounded-xl p-2.5 border border-slate-100 text-xs text-slate-600">
+              <p id="productDescription" class="line-clamp-2 leading-relaxed"></p>
+            </div>
+
+            <!-- Seletores de Variação -->
+            <div class="space-y-2.5 pt-2 border-t border-slate-100">
+              <!-- Tamanho -->
               <div>
-                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 block">Galeria de fotos</span>
-                <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-thin" id="thumbnailsContainer">
-                  <!-- Miniaturas carregadas dinamicamente -->
+                <label for="sizeSelect" class="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <i data-lucide="ruler" class="w-3.5 h-3.5 text-blue-600"></i>
+                  Tamanho
+                </label>
+                <div class="relative">
+                  <select
+                    id="sizeSelect"
+                    class="w-full appearance-none px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs cursor-pointer"
+                  >
+                    <option value="">Selecione o tamanho</option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Cor -->
+              <div>
+                <label for="colorSelect" class="block text-xs font-bold text-slate-700 mb-1 flex items-center gap-1">
+                  <i data-lucide="palette" class="w-3.5 h-3.5 text-blue-600"></i>
+                  Cor
+                </label>
+                <div class="relative">
+                  <select
+                    id="colorSelect"
+                    class="w-full appearance-none px-3 py-2 bg-white border border-slate-200 rounded-xl text-slate-800 font-semibold text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                  >
+                    <option value="">Selecione a cor</option>
+                  </select>
+                  <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                    <i data-lucide="chevron-down" class="w-3.5 h-3.5"></i>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Resumo Variação -->
+              <div id="selectedVariationDiv" class="p-2.5 bg-blue-50/80 border border-blue-200/70 rounded-xl hidden">
+                <div class="flex items-center gap-2 text-blue-900 text-xs">
+                  <i data-lucide="check-circle-2" class="w-4 h-4 text-blue-600 shrink-0"></i>
+                  <span id="selectedVariationText" class="font-bold truncate"></span>
                 </div>
               </div>
             </div>
 
-            <!-- Informações e Ações (Col 5) -->
-            <div class="lg:col-span-5 flex flex-col justify-between space-y-6">
-              <div class="space-y-5">
-                <!-- Marca & ID -->
-                <div class="flex items-center justify-between">
-                  <span id="productBrand" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                    <i data-lucide="tag" class="w-3.5 h-3.5"></i>
-                    <span>Mizuno</span>
-                  </span>
-                </div>
+            <!-- Botão Adicionar ao Carrinho -->
+            <div class="mt-auto pt-2 space-y-2">
+              <a
+                id="addToCartBtn"
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-center transition-all duration-200 shadow-glow flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none"
+              >
+                <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+                <span>Comprar na Loja Oficial</span>
+              </a>
 
-                <!-- Nome -->
-                <h1 id="productName" class="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight"></h1>
-
-                <!-- Descrição -->
-                <div class="bg-slate-50/70 rounded-2xl p-4 border border-slate-100">
-                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-500"></i>
-                    Sobre o Produto
-                  </span>
-                  <p id="productDescription" class="text-slate-600 text-sm leading-relaxed max-h-36 overflow-y-auto pr-1"></p>
-                </div>
-
-                <!-- Seletores de Variação -->
-                <div class="space-y-4 pt-4 border-t border-slate-100">
-                  <!-- Seletor de Tamanho -->
-                  <div>
-                    <label for="sizeSelect" class="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
-                      <i data-lucide="ruler" class="w-4 h-4 text-blue-600"></i>
-                      Selecione o Tamanho
-                    </label>
-                    <div class="relative">
-                      <select
-                        id="sizeSelect"
-                        class="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-sm transition-all cursor-pointer"
-                      >
-                        <option value="">Selecione o tamanho</option>
-                      </select>
-                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Seletor de Cor -->
-                  <div>
-                    <label for="colorSelect" class="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
-                      <i data-lucide="palette" class="w-4 h-4 text-blue-600"></i>
-                      Selecione a Cor
-                    </label>
-                    <div class="relative">
-                      <select
-                        id="colorSelect"
-                        class="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-sm transition-all cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
-                      >
-                        <option value="">Selecione a cor</option>
-                      </select>
-                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
-                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- Variação Selecionada (Resumo) -->
-                  <div id="selectedVariationDiv" class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl shadow-sm hidden">
-                    <div class="flex items-center gap-2.5 text-blue-900 font-semibold text-sm">
-                      <i data-lucide="check-circle-2" class="w-5 h-5 text-blue-600 shrink-0"></i>
-                      <div>
-                        <span class="text-xs text-blue-600 block font-normal">Opção Selecionada:</span>
-                        <span id="selectedVariationText" class="font-bold"></span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Botão Adicionar ao Carrinho & Avisos -->
-              <div class="pt-4 space-y-3">
-                <a
-                  id="addToCartBtn"
-                  href="#"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  class="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-2xl text-center transition-all duration-200 shadow-glow hover:shadow-xl flex items-center justify-center gap-2.5 text-base cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none"
-                >
-                  <i data-lucide="shopping-cart" class="w-5 h-5"></i>
-                  <span>Adicionar ao Carrinho</span>
-                </a>
-
-                <p class="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
-                  <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
-                  Compra segura e direta na loja oficial
-                </p>
-
-                <!-- Mensagem de Erro -->
-                <div id="errorMessage" class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl hidden text-sm flex items-center gap-2.5">
-                  <i data-lucide="alert-circle" class="w-5 h-5 text-red-500 shrink-0"></i>
-                  <span id="errorMessageContent"></span>
-                </div>
-              </div>
+              <p class="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
+                Checkout seguro VTEX
+              </p>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <!-- Mensagem de Carregamento -->
-      <div id="loadingMessage" class="py-16 text-center hidden">
-        <div class="inline-flex flex-col items-center justify-center p-8 bg-white rounded-3xl shadow-card border border-slate-100">
-          <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
-          <h3 class="text-base font-bold text-slate-800">Carregando catálogo...</h3>
-          <p class="text-xs text-slate-500 mt-1">Buscando os produtos mais recentes</p>
+        <!-- ========================================== -->
+        <!-- FEEDBACKS: LOADING & ERRO                  -->
+        <!-- ========================================== -->
+        <div id="loadingMessage" class="my-auto py-12 text-center hidden">
+          <div class="inline-flex flex-col items-center justify-center p-6 bg-white rounded-2xl shadow-card border border-slate-100">
+            <div class="w-9 h-9 border-3 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
+            <h3 class="text-xs font-bold text-slate-800">Carregando...</h3>
+          </div>
         </div>
-      </div>
 
-      <!-- Mensagem de Erro -->
-      <div id="errorSection" class="max-w-xl mx-auto p-6 bg-red-50/90 border border-red-200 rounded-3xl shadow-card text-center hidden">
-        <div class="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
-          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        <div id="errorSection" class="my-auto p-4 bg-red-50/95 border border-red-200 rounded-2xl shadow-card text-center hidden">
+          <div class="w-9 h-9 bg-red-100 text-red-600 rounded-xl flex items-center justify-center mx-auto mb-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+          </div>
+          <h3 class="font-bold text-sm text-red-900 mb-0.5">Aviso</h3>
+          <p id="errorText" class="text-xs text-red-700 mb-3"></p>
+          <button onclick="loadCategories()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer">Tentar novamente</button>
         </div>
-        <h3 class="font-bold text-lg text-red-900 mb-1">Ops! Ocorreu um problema</h3>
-        <p id="errorText" class="text-sm text-red-700 mb-4"></p>
-        <button onclick="loadCategories()" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl shadow-md transition-colors">Tentar novamente</button>
-      </div>
-    </main>
-
-    <!-- Footer -->
-    <footer class="bg-white border-t border-slate-200 py-6 mt-auto text-center text-xs text-slate-400">
-      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <p>© 2026 Mizuno Catálogo Interativo. Todos os direitos reservados.</p>
-        <div class="flex items-center gap-4 text-slate-500">
-          <span class="flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5 text-blue-600"></i> Produtos 100% Originais</span>
-        </div>
-      </div>
-    </footer>
+      </main>
+    </div>
 
     <!-- Swiper JS -->
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>

@@ -113,12 +113,12 @@ app.get("/api/tracking", (req, res) => {
 });
 
 // ======================================================
-// ENVIAR WEBVIEW PARA UMA CONVERSA
+// ENVIAR WEBVIEW PARA UMA CONVERSA (DINÂMICO)
 // ======================================================
 
 app.post("/api/send-webview", async (req, res) => {
   try {
-    const { conversationId } = req.body;
+    const { conversationId, type = "tracking", customText, buttonText } = req.body;
 
     if (!conversationId) {
       return res.status(400).json({
@@ -134,67 +134,57 @@ app.post("/api/send-webview", async (req, res) => {
       });
     }
 
-    const uri = `${WEBVIEW_URL}?conversationId=${encodeURIComponent(conversationId)}`;
+    // Obter URL base
+    const baseUrl = process.env.WEBVIEW_URL ? process.env.WEBVIEW_URL.replace(/\/(webview|catalog)\/?$/, "") : `http://localhost:${PORT}`;
+
+    const isCatalog = type === "catalog";
+    const targetPath = isCatalog ? "catalog" : "webview";
+    const uri = `${baseUrl}/${targetPath}?conversationId=${encodeURIComponent(conversationId)}`;
+
+    const messageText = customText || (isCatalog ? "Confira o nosso catálogo de produtos:" : "Consulte o rastreamento do seu pedido:");
+
+    const actionButtonText = buttonText || (isCatalog ? "Ver Catálogo" : "Ver rastreamento");
 
     const payload = {
       author: {
         type: "business",
       },
-
       content: {
         type: "text",
-
-        text: "Consulte o rastreamento do seu pedido:",
-
+        text: messageText,
         actions: [
           {
             type: "webview",
-
-            text: "Ver rastreamento",
-
+            text: actionButtonText,
             size: "tall",
-
             uri,
-
             fallback: uri,
           },
         ],
       },
     };
 
-    const response = await axios.post(
-      `https://${ZENDESK_SUBDOMAIN}.zendesk.com/sc/v2/apps/${ZENDESK_APP_ID}/conversations/${conversationId}/messages`,
-
-      payload,
-
-      {
-        auth: {
-          username: ZENDESK_KEY_ID,
-
-          password: ZENDESK_SECRET,
-        },
-
-        headers: {
-          "Content-Type": "application/json",
-        },
+    const response = await axios.post(`https://${ZENDESK_SUBDOMAIN}.zendesk.com/sc/v2/apps/${ZENDESK_APP_ID}/conversations/${conversationId}/messages`, payload, {
+      auth: {
+        username: ZENDESK_KEY_ID,
+        password: ZENDESK_SECRET,
       },
-    );
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     res.json({
       success: true,
-
-      message: "Webview enviada com sucesso",
-
+      message: `Webview (${isCatalog ? "catálogo" : "rastreamento"}) enviada com sucesso`,
       data: response.data,
     });
   } catch (error) {
     console.error("Erro ao enviar Webview:");
-
     console.error(error.response?.data || error.message);
 
     res.status(error.response?.status || 500).json({
       success: false,
-
       error: error.response?.data || error.message,
     });
   }

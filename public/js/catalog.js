@@ -1,9 +1,11 @@
 /* ============================================================
    CATALOG LOGIC - Gerenciamento de categorias, produtos e variações
+   Adaptado para Zendesk WebWidget (~400px × 600px)
    ============================================================ */
 
 // Estado da aplicação
 const state = {
+  currentView: "categories", // 'categories' | 'products' | 'details'
   selectedCategory: null,
   selectedProduct: null,
   selectedVariation: null,
@@ -14,28 +16,38 @@ const state = {
 
 // Elementos do DOM
 const dom = {
+  headerBackBtn: document.getElementById("headerBackBtn"),
+  headerTitle: document.getElementById("headerTitle"),
+  headerBrand: document.getElementById("headerBrand"),
+  headerBadge: document.getElementById("headerBadge"),
+
+  categoriesSection: document.getElementById("categoriesSection"),
   categoriesContainer: document.getElementById("categoriesContainer"),
+
   productsSection: document.getElementById("productsSection"),
-  detailsSection: document.getElementById("detailsSection"),
+  productsCarousel: document.getElementById("productsCarousel"),
   categoryTitle: document.getElementById("categoryTitle"),
   clearCategoryBtn: document.getElementById("clearCategoryBtn"),
+
+  detailsSection: document.getElementById("detailsSection"),
   backToCarouselBtn: document.getElementById("backToCarouselBtn"),
-  productsCarousel: document.getElementById("productsCarousel"),
   mainImage: document.getElementById("mainImage"),
+  thumbnailsWrapper: document.getElementById("thumbnailsWrapper"),
   thumbnailsContainer: document.getElementById("thumbnailsContainer"),
   productBrand: document.getElementById("productBrand"),
   productName: document.getElementById("productName"),
+  productPrice: document.getElementById("productPrice"),
+  productListPrice: document.getElementById("productListPrice"),
   productDescription: document.getElementById("productDescription"),
   sizeSelect: document.getElementById("sizeSelect"),
   colorSelect: document.getElementById("colorSelect"),
   selectedVariationDiv: document.getElementById("selectedVariationDiv"),
   selectedVariationText: document.getElementById("selectedVariationText"),
   addToCartBtn: document.getElementById("addToCartBtn"),
+
   loadingMessage: document.getElementById("loadingMessage"),
   errorSection: document.getElementById("errorSection"),
   errorText: document.getElementById("errorText"),
-  errorMessage: document.getElementById("errorMessage"),
-  errorMessageContent: document.getElementById("errorMessageContent"),
 };
 
 // Ícones por categoria
@@ -60,14 +72,81 @@ function escapeHtml(text) {
   return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 }
 
+// Utilitário para formatar preços
+function formatPrice(value) {
+  if (value === null || value === undefined || isNaN(value)) return null;
+  return Number(value).toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
+
+// ============================================================
+// CONTROLE DE TELAS (VIEW MANAGER)
+// ============================================================
+
+function setView(viewName) {
+  state.currentView = viewName;
+
+  dom.categoriesSection.classList.add("hidden");
+  dom.productsSection.classList.add("hidden");
+  dom.detailsSection.classList.add("hidden");
+  dom.errorSection.classList.add("hidden");
+
+  if (viewName === "categories") {
+    dom.categoriesSection.classList.remove("hidden");
+    dom.headerBackBtn.classList.add("hidden");
+    dom.headerBackBtn.classList.remove("flex");
+    dom.headerTitle.textContent = "Catálogo Mizuno";
+    state.selectedCategory = null;
+    state.selectedProduct = null;
+  } else if (viewName === "products") {
+    dom.productsSection.classList.remove("hidden");
+    dom.headerBackBtn.classList.remove("hidden");
+    dom.headerBackBtn.classList.add("flex");
+    dom.headerTitle.textContent = state.selectedCategory?.name || "Produtos";
+    state.selectedProduct = null;
+  } else if (viewName === "details") {
+    dom.detailsSection.classList.remove("hidden");
+    dom.headerBackBtn.classList.remove("hidden");
+    dom.headerBackBtn.classList.add("flex");
+    dom.headerTitle.textContent = "Detalhes";
+  }
+
+  refreshIcons();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 // ============================================================
 // INICIALIZAÇÃO
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  setupNavigationEvents();
   refreshIcons();
   loadCategories();
 });
+
+function setupNavigationEvents() {
+  // Botão voltar do topo
+  dom.headerBackBtn.addEventListener("click", () => {
+    if (state.currentView === "details") {
+      setView("products");
+    } else if (state.currentView === "products") {
+      setView("categories");
+    }
+  });
+
+  // Botão trocar categoria na tela de produtos
+  dom.clearCategoryBtn.addEventListener("click", () => {
+    setView("categories");
+  });
+
+  // Botão voltar ao catálogo na tela de detalhes
+  dom.backToCarouselBtn.addEventListener("click", () => {
+    setView("products");
+  });
+}
 
 // ============================================================
 // CARREGAMENTO DE CATEGORIAS
@@ -103,14 +182,14 @@ function renderCategories(categories) {
       const iconName = CATEGORY_ICONS[category.name] || "tag";
       return `
         <button
-          class="category-btn group p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-500 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col items-center text-center gap-2.5 cursor-pointer"
+          class="category-btn group p-3.5 rounded-2xl bg-white border border-slate-200/90 hover:border-blue-500 shadow-soft hover:shadow-card transition-all duration-200 flex flex-col items-center text-center gap-2 cursor-pointer"
           data-category-id="${category.categoryId}"
-          data-category-name="${category.name}"
+          data-category-name="${escapeHtml(category.name)}"
         >
-          <div class="category-icon-wrapper w-11 h-11 rounded-xl bg-slate-100 group-hover:bg-blue-50 text-slate-600 group-hover:text-blue-600 flex items-center justify-center transition-colors">
+          <div class="category-icon-wrapper w-10 h-10 rounded-xl bg-blue-50/80 group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center transition-all">
             <i data-lucide="${iconName}" class="w-5 h-5 pointer-events-none"></i>
           </div>
-          <span class="font-bold text-xs sm:text-sm text-slate-800 group-hover:text-blue-600 pointer-events-none transition-colors">
+          <span class="font-bold text-xs text-slate-800 group-hover:text-blue-600 pointer-events-none transition-colors">
             ${escapeHtml(category.name)}
           </span>
         </button>
@@ -129,21 +208,11 @@ function renderCategories(categories) {
 }
 
 function selectCategory(btn) {
-  // Remover classe ativa de todos os botões
-  document.querySelectorAll(".category-btn").forEach((b) => {
-    b.classList.remove("active");
-  });
-
-  // Adicionar classe ativa ao botão selecionado
-  btn.classList.add("active");
-
-  // Atualizar estado
   state.selectedCategory = {
     categoryId: btn.dataset.categoryId,
     name: btn.dataset.categoryName,
   };
 
-  // Carregar produtos
   loadProducts(state.selectedCategory.categoryId);
 }
 
@@ -154,8 +223,6 @@ function selectCategory(btn) {
 async function loadProducts(categoryId) {
   try {
     showLoading(true);
-    dom.productsSection.classList.add("hidden");
-    dom.detailsSection.classList.add("hidden");
 
     const response = await fetch(`/api/catalog/products?categoryId=${categoryId}`);
 
@@ -171,21 +238,13 @@ async function loadProducts(categoryId) {
 
     state.products = data.products || [];
     renderProducts(state.products);
+    setView("products");
   } catch (error) {
     console.error("Erro ao carregar produtos:", error);
     showError(`Erro ao carregar produtos: ${error.message}`);
   } finally {
     showLoading(false);
   }
-}
-
-// Utilitário para formatar preços
-function formatPrice(value) {
-  if (value === null || value === undefined || isNaN(value)) return null;
-  return Number(value).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 }
 
 function renderProducts(products) {
@@ -207,48 +266,48 @@ function renderProducts(products) {
       const formattedListPrice = product.listPrice && product.listPrice > product.price ? formatPrice(product.listPrice) : null;
 
       return `
-        <div class="swiper-slide h-auto">
-          <div class="group h-full bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-xl hover:-translate-y-1.5 transition-all duration-300 flex flex-col overflow-hidden">
+        <div class="swiper-slide h-auto flex justify-center">
+          <div class="w-full bg-white rounded-2xl border border-slate-100 shadow-card flex flex-col overflow-hidden">
             <!-- Container Imagem -->
-            <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/50 p-6 flex items-center justify-center h-52 sm:h-60 overflow-hidden">
-              <span class="absolute top-3 left-3 px-2.5 py-1 bg-white/95 backdrop-blur-sm rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wider text-slate-600 shadow-sm border border-slate-100">
+            <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/60 p-4 flex items-center justify-center h-44 overflow-hidden">
+              <span class="absolute top-2.5 left-2.5 px-2 py-0.5 bg-white/95 rounded-md text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-xs border border-slate-100">
                 ${escapeHtml(brand)}
               </span>
               <img
                 src="${productImage}"
                 alt="${escapeHtml(productName)}"
-                class="max-h-40 sm:max-h-48 w-auto max-w-full object-contain mix-blend-multiply group-hover:scale-105 transition-transform duration-300"
+                class="max-h-36 w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-200"
                 onerror="this.src='https://via.placeholder.com/320x260?text=Mizuno'"
                 loading="lazy"
               />
             </div>
 
-            <!-- Informações e Ação -->
-            <div class="p-5 flex-1 flex flex-col justify-between gap-4">
+            <!-- Informações & Ação -->
+            <div class="p-3.5 flex-1 flex flex-col justify-between gap-3">
               <div>
-                <h3 class="font-bold text-slate-900 text-sm leading-snug line-clamp-2 min-h-[2.5rem]" title="${escapeHtml(productName)}">
+                <h4 class="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-2" title="${escapeHtml(productName)}">
                   ${escapeHtml(productName)}
-                </h3>
+                </h4>
                 ${
                   formattedPrice
                     ? `
-                    <div class="mt-2 flex items-baseline gap-2">
-                      <span class="text-base font-extrabold text-blue-700">${formattedPrice}</span>
-                      ${formattedListPrice ? `<span class="text-xs text-slate-400 line-through">${formattedListPrice}</span>` : ""}
+                    <div class="mt-1.5 flex items-baseline gap-1.5">
+                      <span class="text-sm sm:text-base font-black text-blue-700">${formattedPrice}</span>
+                      ${formattedListPrice ? `<span class="text-[11px] text-slate-400 line-through">${formattedListPrice}</span>` : ""}
                     </div>
                   `
                     : product.metaTagDescription
-                      ? `<p class="text-xs text-slate-400 mt-1.5 line-clamp-1">${escapeHtml(product.metaTagDescription)}</p>`
+                      ? `<p class="text-[11px] text-slate-400 mt-1 line-clamp-1">${escapeHtml(product.metaTagDescription)}</p>`
                       : ""
                 }
               </div>
 
               <button
-                class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-blue-500/20 hover:shadow-lg transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                class="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-glow flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 data-product-id="${product.productId}"
                 onclick="viewProductDetails(this)"
               >
-                <i data-lucide="eye" class="w-4 h-4"></i>
+                <i data-lucide="eye" class="w-3.5 h-3.5"></i>
                 <span>Ver Detalhes</span>
               </button>
             </div>
@@ -258,8 +317,6 @@ function renderProducts(products) {
     })
     .join("");
 
-  // Mostrar seção de produtos
-  dom.productsSection.classList.remove("hidden");
   refreshIcons();
 
   // Inicializar/atualizar Swiper com botões customizados
@@ -269,7 +326,7 @@ function renderProducts(products) {
 
   state.swiperInstance = new Swiper(".productCarousel", {
     slidesPerView: 1,
-    spaceBetween: 20,
+    spaceBetween: 12,
     grabCursor: true,
     pagination: {
       el: ".swiper-pagination",
@@ -278,20 +335,6 @@ function renderProducts(products) {
     navigation: {
       nextEl: ".swiper-button-next-custom",
       prevEl: ".swiper-button-prev-custom",
-    },
-    breakpoints: {
-      540: {
-        slidesPerView: 2,
-        spaceBetween: 20,
-      },
-      840: {
-        slidesPerView: 3,
-        spaceBetween: 24,
-      },
-      1200: {
-        slidesPerView: 4,
-        spaceBetween: 24,
-      },
     },
   });
 }
@@ -320,6 +363,7 @@ async function viewProductDetails(btn) {
     state.productDetails = data;
     state.selectedProduct = productId;
     renderProductDetails(data);
+    setView("details");
   } catch (error) {
     console.error("Erro ao carregar detalhes:", error);
     showError(`Erro ao carregar detalhes do produto: ${error.message}`);
@@ -329,10 +373,29 @@ async function viewProductDetails(btn) {
 }
 
 function renderProductDetails(product) {
-  // Informações básicas
-  dom.productBrand.querySelector("span") ? (dom.productBrand.querySelector("span").textContent = product.brand || "Mizuno") : (dom.productBrand.textContent = product.brand || "Mizuno");
+  // Marca
+  dom.productBrand.textContent = product.brand || "Mizuno";
+
+  // Nome
   dom.productName.textContent = product.name || product.productName || "Produto Mizuno";
-  dom.productDescription.textContent = product.description || product.metaTagDescription || "Sem descrição disponível para este produto.";
+
+  // Descrição
+  dom.productDescription.textContent = product.description || product.metaTagDescription || "Produto oficial Mizuno com tecnologia e alta durabilidade.";
+
+  // Preço (da primeira variação disponível)
+  const firstVariation = product.variations?.[0];
+  if (firstVariation?.price) {
+    dom.productPrice.textContent = formatPrice(firstVariation.price);
+    if (firstVariation.listPrice && firstVariation.listPrice > firstVariation.price) {
+      dom.productListPrice.textContent = formatPrice(firstVariation.listPrice);
+      dom.productListPrice.classList.remove("hidden");
+    } else {
+      dom.productListPrice.classList.add("hidden");
+    }
+  } else {
+    dom.productPrice.textContent = "";
+    dom.productListPrice.classList.add("hidden");
+  }
 
   // Normalizar lista de imagens
   const images = (product.images || []).map((img) => ({
@@ -349,37 +412,30 @@ function renderProductDetails(product) {
   // Miniaturas
   renderThumbnails(images);
 
-  // Variações
+  // Variações (tamanho e cor)
   renderVariations(product.variations || []);
 
-  // Mostrar seção de detalhes
-  dom.detailsSection.classList.remove("hidden");
-  dom.productsSection.classList.add("hidden");
-
   refreshIcons();
-
-  // Scroll suave para o topo
-  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function renderThumbnails(images) {
   if (!images || images.length <= 1) {
-    dom.thumbnailsContainer.parentElement.classList.add("hidden");
+    dom.thumbnailsWrapper.classList.add("hidden");
     return;
   }
 
-  dom.thumbnailsContainer.parentElement.classList.remove("hidden");
+  dom.thumbnailsWrapper.classList.remove("hidden");
   dom.thumbnailsContainer.innerHTML = images
     .map(
       (image, index) => `
         <div
-          class="thumbnail-image ${index === 0 ? "active" : ""} w-16 h-16 sm:w-20 sm:h-20 rounded-xl bg-slate-50 border-2 border-slate-200/90 hover:border-blue-400 p-1 flex items-center justify-center cursor-pointer shrink-0 shadow-sm transition-all"
+          class="thumbnail-image ${index === 0 ? "active" : ""} w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 p-1 flex items-center justify-center cursor-pointer shrink-0 transition-all"
           data-full-url="${image.imageUrl}"
           onclick="changeMainImage(this)"
         >
           <img
             src="${image.imageUrl}"
-            alt="Miniatura ${index + 1}"
+            alt="Foto ${index + 1}"
             class="max-h-full max-w-full object-contain mix-blend-multiply"
             onerror="this.src='https://via.placeholder.com/80x80?text=Foto'"
           />
@@ -390,15 +446,12 @@ function renderThumbnails(images) {
 }
 
 function changeMainImage(thumbnail) {
-  // Remover classe ativa de todas as miniaturas
   document.querySelectorAll(".thumbnail-image").forEach((img) => {
     img.classList.remove("active");
   });
 
-  // Adicionar classe ativa à miniatura selecionada
   thumbnail.classList.add("active");
 
-  // Atualizar imagem principal com animação sutil
   dom.mainImage.classList.add("opacity-50");
   dom.mainImage.src = thumbnail.dataset.fullUrl;
   dom.mainImage.onload = () => {
@@ -572,26 +625,6 @@ function updateSelectedVariation(sizeMap) {
 }
 
 // ============================================================
-// NAVEGAÇÃO
-// ============================================================
-
-dom.clearCategoryBtn.addEventListener("click", () => {
-  state.selectedProduct = null;
-  state.selectedVariation = null;
-  dom.detailsSection.classList.add("hidden");
-  dom.productsSection.classList.remove("hidden");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-});
-
-dom.backToCarouselBtn.addEventListener("click", () => {
-  state.selectedProduct = null;
-  state.selectedVariation = null;
-  dom.detailsSection.classList.add("hidden");
-  dom.productsSection.classList.remove("hidden");
-  window.scrollTo({ top: 0, behavior: "smooth" });
-});
-
-// ============================================================
 // UTILITÁRIOS DE FEEDBACK
 // ============================================================
 
@@ -607,6 +640,7 @@ function showLoading(show) {
 function showError(message) {
   dom.errorSection.classList.remove("hidden");
   dom.errorText.textContent = message;
+  dom.categoriesSection.classList.add("hidden");
   dom.productsSection.classList.add("hidden");
   dom.detailsSection.classList.add("hidden");
   refreshIcons();
