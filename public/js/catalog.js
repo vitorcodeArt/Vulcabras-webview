@@ -43,6 +43,8 @@ const dom = {
   colorSelect: document.getElementById("colorSelect"),
   selectedVariationDiv: document.getElementById("selectedVariationDiv"),
   selectedVariationText: document.getElementById("selectedVariationText"),
+  variationAlert: document.getElementById("variationAlert"),
+  variationAlertText: document.getElementById("variationAlertText"),
   addToCartBtn: document.getElementById("addToCartBtn"),
 
   loadingMessage: document.getElementById("loadingMessage"),
@@ -146,6 +148,64 @@ function setupNavigationEvents() {
   dom.backToCarouselBtn.addEventListener("click", () => {
     setView("products");
   });
+
+  // Botão Comprar na Loja Oficial
+  dom.addToCartBtn.addEventListener("click", handleAddToCart);
+}
+
+// Handler de validação antes de redirecionar para a loja oficial
+function handleAddToCart() {
+  // Se ainda não houver variação/opções definidas
+  if (!state.selectedVariation || !state.selectedVariation.addToCartLink) {
+    const sizeSelected = !!dom.sizeSelect.value;
+    const colorSelected = !!dom.colorSelect.value;
+
+    let pendingMsg = "Defina o tamanho e a cor antes de continuar.";
+    if (!sizeSelected && !colorSelected) {
+      pendingMsg = "Por favor, selecione o tamanho e a cor desejados.";
+      dom.sizeSelect.focus();
+    } else if (!sizeSelected) {
+      pendingMsg = "Por favor, selecione o tamanho do produto.";
+      dom.sizeSelect.focus();
+    } else if (!colorSelected) {
+      pendingMsg = "Por favor, selecione a cor do produto.";
+      dom.colorSelect.focus();
+    } else if (state.selectedVariation && !state.selectedVariation.addToCartLink) {
+      pendingMsg = "Esta opção está indisponível no momento.";
+    }
+
+    showVariationAlert(pendingMsg);
+    return;
+  }
+
+  // Se estiver tudo selecionado corretamente, abre o link oficial
+  hideVariationAlert();
+  window.open(state.selectedVariation.addToCartLink, "_blank", "noopener,noreferrer");
+}
+
+function showVariationAlert(message) {
+  if (dom.variationAlert && dom.variationAlertText) {
+    dom.variationAlertText.textContent = message;
+    dom.variationAlert.classList.remove("hidden");
+    refreshIcons();
+    dom.variationAlert.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function hideVariationAlert() {
+  if (dom.variationAlert) {
+    dom.variationAlert.classList.add("hidden");
+  }
+}
+
+function updateCartButtonState(enabled) {
+  if (enabled && state.selectedVariation?.addToCartLink) {
+    dom.addToCartBtn.className =
+      "w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-center transition-all duration-200 shadow-glow flex items-center justify-center gap-2 text-sm cursor-pointer";
+  } else {
+    dom.addToCartBtn.className =
+      "w-full py-3 px-4 bg-slate-300 text-slate-500 font-bold rounded-xl text-center transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-not-allowed shadow-none";
+  }
 }
 
 // ============================================================
@@ -465,8 +525,9 @@ function renderVariations(variations) {
   dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
   dom.colorSelect.disabled = true;
   dom.selectedVariationDiv.classList.add("hidden");
-  dom.addToCartBtn.classList.add("disabled");
-  dom.addToCartBtn.href = "#";
+  hideVariationAlert();
+  state.selectedVariation = null;
+  updateCartButtonState(false);
 
   if (!variations || variations.length === 0) {
     dom.sizeSelect.innerHTML = '<option value="" selected>Produto sem variações</option>';
@@ -487,10 +548,7 @@ function renderVariations(variations) {
     dom.selectedVariationDiv.classList.remove("hidden");
     dom.selectedVariationText.textContent = variations[0].name || "Padrão";
 
-    if (variations[0].addToCartLink) {
-      dom.addToCartBtn.href = variations[0].addToCartLink;
-      dom.addToCartBtn.classList.remove("disabled");
-    }
+    updateCartButtonState(true);
     refreshIcons();
     return;
   }
@@ -548,10 +606,12 @@ function renderVariations(variations) {
       dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
       dom.colorSelect.disabled = true;
       dom.selectedVariationDiv.classList.add("hidden");
-      dom.addToCartBtn.classList.add("disabled");
-      dom.addToCartBtn.href = "#";
+      state.selectedVariation = null;
+      updateCartButtonState(false);
       return;
     }
+
+    hideVariationAlert();
 
     // Atualizar cores disponíveis para o tamanho
     const variationsForSize = sizeMap[selectedSize] || [];
@@ -575,12 +635,15 @@ function renderVariations(variations) {
           .join("");
       dom.colorSelect.disabled = false;
       dom.selectedVariationDiv.classList.add("hidden");
+      state.selectedVariation = null;
+      updateCartButtonState(false);
     }
     refreshIcons();
   };
 
   // Event listener para cor
   dom.colorSelect.onchange = function () {
+    hideVariationAlert();
     updateSelectedVariation(sizeMap);
   };
 }
@@ -591,8 +654,8 @@ function updateSelectedVariation(sizeMap) {
 
   if (!selectedSize || !selectedColor) {
     dom.selectedVariationDiv.classList.add("hidden");
-    dom.addToCartBtn.classList.add("disabled");
-    dom.addToCartBtn.href = "#";
+    state.selectedVariation = null;
+    updateCartButtonState(false);
     return;
   }
 
@@ -604,16 +667,13 @@ function updateSelectedVariation(sizeMap) {
 
     dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedSize} - ${selectedColor}`;
     dom.selectedVariationDiv.classList.remove("hidden");
+    hideVariationAlert();
 
-    if (variation.addToCartLink) {
-      dom.addToCartBtn.href = variation.addToCartLink;
-      dom.addToCartBtn.classList.remove("disabled");
-      dom.addToCartBtn.removeAttribute("disabled");
-    } else {
-      dom.addToCartBtn.classList.add("disabled");
-      dom.addToCartBtn.setAttribute("disabled", "true");
-      dom.addToCartBtn.href = "#";
+    if (variation.price) {
+      dom.productPrice.textContent = formatPrice(variation.price);
     }
+
+    updateCartButtonState(true);
 
     // Se a variação tem imagens específicas, trocar
     if (variation.images && variation.images.length > 0 && variation.images[0].imageUrl) {

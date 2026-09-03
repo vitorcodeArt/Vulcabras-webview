@@ -243,20 +243,27 @@
                   <span id="selectedVariationText" class="font-bold truncate"></span>
                 </div>
               </div>
+
+              <!-- Alerta de Validação de Opções Pendentes -->
+              <div id="variationAlert" class="hidden p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs flex items-start gap-2 animate-fadeIn">
+                <i data-lucide="alert-circle" class="w-4 h-4 text-amber-600 shrink-0 mt-0.5"></i>
+                <div>
+                  <span class="font-bold block text-amber-900">Selecione as opções do produto:</span>
+                  <span id="variationAlertText">Defina o tamanho e a cor antes de continuar.</span>
+                </div>
+              </div>
             </div>
 
             <!-- Botão Adicionar ao Carrinho -->
             <div class="mt-auto pt-2 space-y-2">
-              <a
+              <button
                 id="addToCartBtn"
-                href="#"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-center transition-all duration-200 shadow-glow flex items-center justify-center gap-2 text-sm cursor-pointer disabled:opacity-40 disabled:pointer-events-none disabled:shadow-none"
+                type="button"
+                class="w-full py-3 px-4 bg-slate-300 text-slate-500 font-bold rounded-xl text-center transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-not-allowed shadow-none"
               >
                 <i data-lucide="shopping-cart" class="w-4 h-4"></i>
                 <span>Comprar na Loja Oficial</span>
-              </a>
+              </button>
 
               <p class="text-center text-[11px] text-slate-400 flex items-center justify-center gap-1">
                 <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-500"></i>
