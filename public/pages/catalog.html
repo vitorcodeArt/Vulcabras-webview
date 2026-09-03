@@ -5,150 +5,308 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Catálogo de Produtos - Mizuno</title>
 
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
-
-    <!-- Tailwind CSS -->
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                50: "#eff6ff",
+                100: "#dbeafe",
+                200: "#bfdbfe",
+                500: "#3b82f6",
+                600: "#2563eb",
+                700: "#1d4ed8",
+                800: "#1e40af",
+                900: "#1e3a8a",
+              },
+            },
+            boxShadow: {
+              soft: "0 4px 20px -2px rgba(0, 0, 0, 0.05)",
+              card: "0 10px 25px -5px rgba(0, 0, 0, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.04)",
+              glow: "0 10px 25px -5px rgba(37, 99, 235, 0.25)",
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
 
     <!-- Swiper CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-    <!-- Catálogo CSS -->
+    <!-- Catálogo CSS Custom -->
     <link rel="stylesheet" href="../css/catalog.css" />
   </head>
-  <body class="bg-gray-50">
+  <body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
     <!-- Header -->
-    <header class="bg-white shadow-sm py-4">
-      <div class="container">
-        <div class="flex items-center justify-between">
-          <h1 class="text-2xl font-bold text-gray-800">Catálogo Mizuno</h1>
-          <a href="/" class="text-blue-600 hover:text-blue-800 text-sm font-medium"> ← Voltar </a>
+    <header class="bg-white/90 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200/80 shadow-sm">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16 sm:h-20">
+          <div class="flex items-center space-x-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
+              <i data-lucide="shopping-bag" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="flex items-center space-x-2">
+                <span class="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900">Mizuno</span>
+                <span class="text-xs px-2 py-0.5 font-semibold bg-blue-100 text-blue-700 rounded-full">Catálogo</span>
+              </div>
+              <p class="text-xs text-slate-500 hidden sm:block">Explore os melhores produtos e lançamentos</p>
+            </div>
+          </div>
+
+          <a
+            href="/"
+            class="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-semibold text-slate-700 hover:text-blue-600 bg-slate-100/80 hover:bg-blue-50 rounded-xl transition-all duration-200 shadow-sm"
+          >
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>Voltar</span>
+          </a>
         </div>
       </div>
     </header>
 
     <!-- Main Content -->
-    <main class="container py-8">
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
       <!-- Seção de Categorias -->
-      <section class="mb-12">
-        <h2 class="text-xl font-semibold text-gray-800 mb-6">Selecione uma Categoria</h2>
-        <div id="categoriesContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-          <!-- Botões de categorias carregados dinamicamente -->
+      <section class="mb-10">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-6 gap-2">
+          <div>
+            <div class="flex items-center gap-2 text-blue-600 text-sm font-semibold uppercase tracking-wider mb-1">
+              <i data-lucide="layout-grid" class="w-4 h-4"></i>
+              <span>Navegação</span>
+            </div>
+            <h2 class="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">Categorias em Destaque</h2>
+          </div>
+          <p class="text-sm text-slate-500">Selecione uma categoria para visualizar os produtos</p>
+        </div>
+
+        <div id="categoriesContainer" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 sm:gap-4">
+          <!-- Botões de categorias carregados dinamicamente com Tailwind -->
         </div>
       </section>
 
       <!-- Seção de Produtos (Carrossel) -->
-      <section id="productsSection" class="mb-12 hidden">
-        <div class="flex items-center justify-between mb-6">
-          <h2 id="categoryTitle" class="text-xl font-semibold text-gray-800"></h2>
-          <button id="clearCategoryBtn" class="px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded">Mudar categoria</button>
-        </div>
-
-        <!-- Carrossel com Swiper -->
-        <div class="swiper productCarousel">
-          <div class="swiper-wrapper" id="productsCarousel">
-            <!-- Produtos carregados dinamicamente -->
+      <section id="productsSection" class="mb-12 hidden animate-fadeIn">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-100">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-5 border-b border-slate-100 gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                <i data-lucide="sparkles" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Mostrando categoria</span>
+                <h2 id="categoryTitle" class="text-xl sm:text-2xl font-bold text-slate-900"></h2>
+              </div>
+            </div>
+            <button
+              id="clearCategoryBtn"
+              class="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 hover:text-blue-600 bg-slate-50 hover:bg-blue-50 rounded-xl transition-all duration-200 border border-slate-200 hover:border-blue-200"
+            >
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Trocar categoria</span>
+            </button>
           </div>
-          <div class="swiper-pagination"></div>
-          <div class="swiper-button-prev"></div>
-          <div class="swiper-button-next"></div>
+
+          <!-- Carrossel com Swiper -->
+          <div class="relative px-2 sm:px-6">
+            <div class="swiper productCarousel !pb-12 !pt-2">
+              <div class="swiper-wrapper" id="productsCarousel">
+                <!-- Produtos carregados dinamicamente -->
+              </div>
+              <div class="swiper-pagination !bottom-2"></div>
+            </div>
+
+            <!-- Botões Customizados do Swiper -->
+            <button
+              class="swiper-button-prev-custom absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 sm:-translate-x-4 z-10 w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-600 rounded-full shadow-lg border border-slate-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+            >
+              <i data-lucide="chevron-left" class="w-5 h-5"></i>
+            </button>
+            <button
+              class="swiper-button-next-custom absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 sm:translate-x-4 z-10 w-11 h-11 bg-white hover:bg-slate-50 text-slate-700 hover:text-blue-600 rounded-full shadow-lg border border-slate-200 flex items-center justify-center transition-all duration-200 hover:scale-105"
+            >
+              <i data-lucide="chevron-right" class="w-5 h-5"></i>
+            </button>
+          </div>
         </div>
       </section>
 
       <!-- Seção de Detalhes do Produto -->
-      <section id="detailsSection" class="mb-12 hidden">
-        <button id="backToCarouselBtn" class="mb-6 px-4 py-2 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded">← Voltar ao catálogo</button>
+      <section id="detailsSection" class="mb-12 hidden animate-fadeIn">
+        <div class="mb-6 flex items-center justify-between">
+          <button
+            id="backToCarouselBtn"
+            class="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 hover:border-blue-300 text-slate-700 hover:text-blue-600 font-semibold text-sm rounded-xl shadow-sm hover:shadow transition-all duration-200"
+          >
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            <span>Voltar ao catálogo</span>
+          </button>
+        </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <!-- Imagens do Produto -->
-          <div class="lg:col-span-2">
-            <div class="mb-6">
-              <img id="mainImage" src="" alt="Imagem principal do produto" class="w-full h-96 object-cover rounded-lg shadow-md" />
-            </div>
-
-            <!-- Miniaturas de Imagens -->
-            <div class="flex gap-3" id="thumbnailsContainer">
-              <!-- Miniaturas carregadas dinamicamente -->
-            </div>
-          </div>
-
-          <!-- Informações do Produto -->
-          <div class="space-y-6">
-            <!-- Marca -->
-            <div>
-              <span id="productBrand" class="text-sm text-gray-500 font-semibold uppercase"></span>
-            </div>
-
-            <!-- Nome -->
-            <div>
-              <h1 id="productName" class="text-2xl font-bold text-gray-800"></h1>
-            </div>
-
-            <!-- Descrição -->
-            <div>
-              <p id="productDescription" class="text-gray-600 leading-relaxed text-sm"></p>
-            </div>
-
-            <!-- Seletores de Variação -->
-            <div class="space-y-4 pt-6 border-t border-gray-200">
-              <!-- Seletor de Tamanho -->
-              <div>
-                <label for="sizeSelect" class="block text-sm font-semibold text-gray-700 mb-2"> Tamanho </label>
-                <select id="sizeSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="">Selecione o tamanho</option>
-                </select>
-              </div>
-
-              <!-- Seletor de Cor -->
-              <div>
-                <label for="colorSelect" class="block text-sm font-semibold text-gray-700 mb-2"> Cor </label>
-                <select id="colorSelect" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                  <option value="">Selecione a cor</option>
-                </select>
-              </div>
-
-              <!-- Variação Selecionada (Resumo) -->
-              <div id="selectedVariationDiv" class="p-4 bg-blue-50 border border-blue-200 rounded-lg hidden">
-                <p class="text-sm text-gray-700"><strong>Selecionado:</strong> <span id="selectedVariationText"></span></p>
-              </div>
-            </div>
-
-            <!-- Botão Adicionar ao Carrinho -->
-            <div>
-              <a
-                id="addToCartBtn"
-                href="#"
-                target="_blank"
-                rel="noopener noreferrer"
-                class="block w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-center transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+        <div class="bg-white rounded-3xl p-6 sm:p-10 shadow-card border border-slate-100">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+            <!-- Imagens do Produto (Col 7) -->
+            <div class="lg:col-span-7 flex flex-col gap-5">
+              <!-- Imagem Principal -->
+              <div
+                class="relative bg-gradient-to-b from-slate-50 to-slate-100/60 rounded-2xl p-6 sm:p-8 flex items-center justify-center border border-slate-200/70 overflow-hidden shadow-inner group min-h-[350px] sm:min-h-[460px]"
               >
-                Adicionar ao Carrinho
-              </a>
+                <img
+                  id="mainImage"
+                  src=""
+                  alt="Imagem principal do produto"
+                  class="max-h-[320px] sm:max-h-[400px] w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-105"
+                />
+              </div>
+
+              <!-- Miniaturas de Imagens -->
+              <div>
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2.5 block">Galeria de fotos</span>
+                <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-thin" id="thumbnailsContainer">
+                  <!-- Miniaturas carregadas dinamicamente -->
+                </div>
+              </div>
             </div>
 
-            <!-- Mensagem de Erro -->
-            <div id="errorMessage" class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg hidden text-sm"></div>
+            <!-- Informações e Ações (Col 5) -->
+            <div class="lg:col-span-5 flex flex-col justify-between space-y-6">
+              <div class="space-y-5">
+                <!-- Marca & ID -->
+                <div class="flex items-center justify-between">
+                  <span id="productBrand" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                    <i data-lucide="tag" class="w-3.5 h-3.5"></i>
+                    <span>Mizuno</span>
+                  </span>
+                </div>
+
+                <!-- Nome -->
+                <h1 id="productName" class="text-2xl sm:text-3xl font-extrabold text-slate-900 leading-tight"></h1>
+
+                <!-- Descrição -->
+                <div class="bg-slate-50/70 rounded-2xl p-4 border border-slate-100">
+                  <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <i data-lucide="info" class="w-3.5 h-3.5 text-blue-500"></i>
+                    Sobre o Produto
+                  </span>
+                  <p id="productDescription" class="text-slate-600 text-sm leading-relaxed max-h-36 overflow-y-auto pr-1"></p>
+                </div>
+
+                <!-- Seletores de Variação -->
+                <div class="space-y-4 pt-4 border-t border-slate-100">
+                  <!-- Seletor de Tamanho -->
+                  <div>
+                    <label for="sizeSelect" class="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                      <i data-lucide="ruler" class="w-4 h-4 text-blue-600"></i>
+                      Selecione o Tamanho
+                    </label>
+                    <div class="relative">
+                      <select
+                        id="sizeSelect"
+                        class="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-sm transition-all cursor-pointer"
+                      >
+                        <option value="">Selecione o tamanho</option>
+                      </select>
+                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Seletor de Cor -->
+                  <div>
+                    <label for="colorSelect" class="block text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                      <i data-lucide="palette" class="w-4 h-4 text-blue-600"></i>
+                      Selecione a Cor
+                    </label>
+                    <div class="relative">
+                      <select
+                        id="colorSelect"
+                        class="w-full appearance-none px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-800 font-medium text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-sm transition-all cursor-pointer disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
+                      >
+                        <option value="">Selecione a cor</option>
+                      </select>
+                      <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-500">
+                        <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Variação Selecionada (Resumo) -->
+                  <div id="selectedVariationDiv" class="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl shadow-sm hidden">
+                    <div class="flex items-center gap-2.5 text-blue-900 font-semibold text-sm">
+                      <i data-lucide="check-circle-2" class="w-5 h-5 text-blue-600 shrink-0"></i>
+                      <div>
+                        <span class="text-xs text-blue-600 block font-normal">Opção Selecionada:</span>
+                        <span id="selectedVariationText" class="font-bold"></span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Botão Adicionar ao Carrinho & Avisos -->
+              <div class="pt-4 space-y-3">
+                <a
+                  id="addToCartBtn"
+                  href="#"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-2xl text-center transition-all duration-200 shadow-glow hover:shadow-xl flex items-center justify-center gap-2.5 text-base cursor-pointer disabled:opacity-50 disabled:pointer-events-none disabled:shadow-none"
+                >
+                  <i data-lucide="shopping-cart" class="w-5 h-5"></i>
+                  <span>Adicionar ao Carrinho</span>
+                </a>
+
+                <p class="text-center text-xs text-slate-400 flex items-center justify-center gap-1.5">
+                  <i data-lucide="shield-check" class="w-4 h-4 text-emerald-500"></i>
+                  Compra segura e direta na loja oficial
+                </p>
+
+                <!-- Mensagem de Erro -->
+                <div id="errorMessage" class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl hidden text-sm flex items-center gap-2.5">
+                  <i data-lucide="alert-circle" class="w-5 h-5 text-red-500 shrink-0"></i>
+                  <span id="errorMessageContent"></span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
       <!-- Mensagem de Carregamento -->
-      <div id="loadingMessage" class="text-center py-12 hidden">
-        <div class="inline-block">
-          <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-          <p class="text-gray-600">Carregando...</p>
+      <div id="loadingMessage" class="py-16 text-center hidden">
+        <div class="inline-flex flex-col items-center justify-center p-8 bg-white rounded-3xl shadow-card border border-slate-100">
+          <div class="w-12 h-12 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+          <h3 class="text-base font-bold text-slate-800">Carregando catálogo...</h3>
+          <p class="text-xs text-slate-500 mt-1">Buscando os produtos mais recentes</p>
         </div>
       </div>
 
       <!-- Mensagem de Erro -->
-      <div id="errorSection" class="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg hidden">
-        <h3 class="font-semibold mb-2">Erro ao carregar dados</h3>
-        <p id="errorText"></p>
+      <div id="errorSection" class="max-w-xl mx-auto p-6 bg-red-50/90 border border-red-200 rounded-3xl shadow-card text-center hidden">
+        <div class="w-12 h-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+        </div>
+        <h3 class="font-bold text-lg text-red-900 mb-1">Ops! Ocorreu um problema</h3>
+        <p id="errorText" class="text-sm text-red-700 mb-4"></p>
+        <button onclick="loadCategories()" class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-sm rounded-xl shadow-md transition-colors">Tentar novamente</button>
       </div>
     </main>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Footer -->
+    <footer class="bg-white border-t border-slate-200 py-6 mt-auto text-center text-xs text-slate-400">
+      <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <p>© 2026 Mizuno Catálogo Interativo. Todos os direitos reservados.</p>
+        <div class="flex items-center gap-4 text-slate-500">
+          <span class="flex items-center gap-1"><i data-lucide="check" class="w-3.5 h-3.5 text-blue-600"></i> Produtos 100% Originais</span>
+        </div>
+      </div>
+    </footer>
 
     <!-- Swiper JS -->
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>

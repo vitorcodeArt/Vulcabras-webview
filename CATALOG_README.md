@@ -273,7 +273,7 @@ Para usar dentro de um bot Zendesk (Ultimate):
 
 ```javascript
 // No seu fluxo do bot, use:
-const catalogUrl = "https://seu-render-app.onrender.com/catalog";
+const catalogUrl = "https://vulcabras-webview.onrender.com/catalog";
 
 // Envie como webview
 {

@@ -210,11 +210,11 @@ const VTEX_API_TOKEN = process.env.VTEX_API_TOKEN;
 
 // Categorias disponíveis
 const CATEGORIES = [
-  { id: "1", name: "Masculino", categoryId: "3" },
-  { id: "2", name: "Feminino", categoryId: "4" },
-  { id: "3", name: "Kids", categoryId: "5" },
-  { id: "4", name: "Esportes", categoryId: "6" },
-  { id: "5", name: "Calçados", categoryId: "2" },
+  { id: "1", name: "Masculino", categoryId: "1" },
+  { id: "2", name: "Feminino", categoryId: "2" },
+  { id: "3", name: "Kids", categoryId: "3" },
+  { id: "4", name: "Esportes", categoryId: "69" },
+  { id: "5", name: "Calçados", categoryId: "74" },
 ];
 
 // Endpoint: listar categorias
@@ -254,13 +254,54 @@ app.get("/api/catalog/products", async (req, res) => {
     });
 
     // Mapear apenas dados necessários
-    const products = response.data.map((product) => ({
-      productId: product.productId,
-      name: product.name,
-      brand: product.brand,
-      metaTagDescription: product.metaTagDescription,
-      image: product.image,
-    }));
+    const products = response.data.map((product) => {
+      let imageUrl = null;
+      let price = null;
+      let listPrice = null;
+
+      // Buscar a primeira imagem válida em todos os items
+      if (Array.isArray(product.items)) {
+        for (const item of product.items) {
+          const itemImages = item.images || item.image || [];
+          if (Array.isArray(itemImages) && itemImages.length > 0) {
+            for (const img of itemImages) {
+              const url = typeof img === "object" ? img?.imageUrl || img?.url : img;
+              if (url && typeof url === "string" && url.trim().length > 0) {
+                imageUrl = url.trim();
+                break;
+              }
+            }
+          }
+          if (imageUrl) break;
+        }
+
+        // Buscar preços
+        const firstSeller = product.items[0]?.sellers?.[0];
+        if (firstSeller?.commertialOffer) {
+          price = firstSeller.commertialOffer.Price || null;
+          listPrice = firstSeller.commertialOffer.ListPrice || null;
+        }
+      }
+
+      // Fallback para raiz do produto
+      if (!imageUrl && product.image) {
+        imageUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
+      }
+
+      const productName = product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno";
+
+      return {
+        productId: product.productId,
+        name: productName,
+        brand: product.brand || "Mizuno",
+        metaTagDescription: product.metaTagDescription || "",
+        price: price,
+        listPrice: listPrice,
+        image: imageUrl,
+        imageUrl: imageUrl,
+      };
+    });
+    console.log("Produtos mapeados:", products);
 
     res.json({
       success: true,
@@ -322,27 +363,67 @@ app.get("/api/catalog/product-details", async (req, res) => {
       });
     }
 
-    // Extrair imagens do primeiro item (máximo 5)
-    const images = product.items[0].images.slice(0, 5).map((img) => ({
-      url: img.imageUrl,
-      text: img.imageText,
-    }));
+    // Coletar imagens únicas de todos os items
+    const imagesMap = new Map();
+    product.items.forEach((item) => {
+      const itemImages = item.images || item.image || [];
+      if (Array.isArray(itemImages)) {
+        itemImages.forEach((img) => {
+          const url = typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "";
+          if (url && !imagesMap.has(url)) {
+            imagesMap.set(url, {
+              imageUrl: url,
+              url: url,
+              text: (typeof img === "object" && (img.imageText || img.text)) || product.productName || "",
+            });
+          }
+        });
+      }
+    });
 
-    // Extrair variações (SKUs com tamanho, cor e link)
-    const variations = product.items.map((item) => ({
-      sku: item.itemId,
-      name: item.name,
-      nameComplete: item.nameComplete,
-      complementName: item.complementName || product.complementName,
-      addToCartLink: item.sellers?.[0]?.addToCartLink || null,
-    }));
+    const images = Array.from(imagesMap.values()).slice(0, 8);
+
+    if (images.length === 0 && product.image) {
+      const fallbackUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
+      images.push({
+        imageUrl: fallbackUrl,
+        url: fallbackUrl,
+        text: product.productName || "",
+      });
+    }
+
+    // Extrair variações (SKUs com tamanho, cor, link e imagens)
+    const variations = product.items.map((item) => {
+      const seller = item.sellers?.[0];
+      const commertialOffer = seller?.commertialOffer || {};
+      const itemImages = (item.images || item.image || []).map((img) => ({
+        imageUrl: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
+        url: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
+      }));
+
+      const size = (Array.isArray(item.Tamanho) && item.Tamanho[0]) || null;
+      const color = (Array.isArray(item.Cor) && item.Cor[0]) || null;
+
+      return {
+        sku: item.itemId,
+        name: item.name,
+        nameComplete: item.nameComplete,
+        size: size,
+        color: color,
+        price: commertialOffer.Price || null,
+        listPrice: commertialOffer.ListPrice || null,
+        complementName: item.complementName || product.complementName,
+        addToCartLink: seller?.addToCartLink || null,
+        images: itemImages,
+      };
+    });
 
     res.json({
       success: true,
       productId: product.productId,
-      name: product.productName,
-      brand: product.brand,
-      description: product.description,
+      name: product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno",
+      brand: product.brand || "Mizuno",
+      description: product.description || product.metaTagDescription || "",
       complementName: product.complementName,
       images,
       variations,
