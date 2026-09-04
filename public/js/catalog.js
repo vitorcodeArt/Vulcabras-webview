@@ -336,7 +336,7 @@ function renderProducts(products) {
               <img
                 src="${productImage}"
                 alt="${escapeHtml(productName)}"
-                class="max-h-36 w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-200"
+                class="max-h-36 w-auto max-w-full object-cover mix-blend-multiply transition-transform duration-200"
                 onerror="this.src='https://via.placeholder.com/320x260?text=Mizuno'"
                 loading="lazy"
               />

@@ -2,6 +2,15 @@
    CATALOG STYLES - Personalizações Modernas com Tailwind & Swiper
    ============================================================ */
 
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #d9e4ff #f1f5f9;
+}
+
+#thumbnailsContainer {
+  scrollbar-width: thin;
+  scrollbar-color: #d9e4ff #f1f5f9;
+}
 /* Botões de Categoria */
 .category-btn {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
