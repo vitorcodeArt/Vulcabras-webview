@@ -485,6 +485,7 @@ function renderThumbnails(images) {
   }
 
   dom.thumbnailsWrapper.classList.remove("hidden");
+  dom.thumbnailsContainer.scrollLeft = 0;
   dom.thumbnailsContainer.innerHTML = images
     .map(
       (image, index) => `
@@ -496,7 +497,7 @@ function renderThumbnails(images) {
           <img
             src="${image.imageUrl}"
             alt="Foto ${index + 1}"
-            class="max-h-full max-w-full object-contain mix-blend-multiply"
+            class="max-h-full max-w-full object-contain mix-blend-multiply pointer-events-none"
             onerror="this.src='https://via.placeholder.com/80x80?text=Foto'"
           />
         </div>
@@ -511,6 +512,15 @@ function changeMainImage(thumbnail) {
   });
 
   thumbnail.classList.add("active");
+
+  // Scroll automático suave para centralizar/revelar a miniatura clicada à esquerda ou direita
+  if (thumbnail.scrollIntoView) {
+    thumbnail.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }
 
   dom.mainImage.classList.add("opacity-50");
   dom.mainImage.src = thumbnail.dataset.fullUrl;
@@ -675,9 +685,15 @@ function updateSelectedVariation(sizeMap) {
 
     updateCartButtonState(true);
 
-    // Se a variação tem imagens específicas, trocar
+    // Se a variação tem imagens específicas, trocar e sincronizar miniatura
     if (variation.images && variation.images.length > 0 && variation.images[0].imageUrl) {
-      dom.mainImage.src = variation.images[0].imageUrl;
+      const targetUrl = variation.images[0].imageUrl;
+      const matchingThumb = document.querySelector(`.thumbnail-image[data-full-url="${targetUrl}"]`);
+      if (matchingThumb) {
+        changeMainImage(matchingThumb);
+      } else {
+        dom.mainImage.src = targetUrl;
+      }
     }
 
     refreshIcons();
