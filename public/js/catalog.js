@@ -90,29 +90,29 @@ function formatPrice(value) {
 function setView(viewName) {
   state.currentView = viewName;
 
-  dom.categoriesSection.classList.add("hidden");
-  dom.productsSection.classList.add("hidden");
-  dom.detailsSection.classList.add("hidden");
-  dom.errorSection.classList.add("hidden");
+  dom.categoriesSection?.classList.add("hidden");
+  dom.productsSection?.classList.add("hidden");
+  dom.detailsSection?.classList.add("hidden");
+  dom.errorSection?.classList.add("hidden");
 
   if (viewName === "categories") {
-    dom.categoriesSection.classList.remove("hidden");
-    dom.headerBackBtn.classList.add("hidden");
-    dom.headerBackBtn.classList.remove("flex");
-    dom.headerTitle.textContent = "Catálogo Mizuno";
+    dom.categoriesSection?.classList.remove("hidden");
+    dom.headerBackBtn?.classList.add("hidden");
+    dom.headerBackBtn?.classList.remove("flex");
+    if (dom.headerTitle) dom.headerTitle.textContent = "Catálogo Mizuno";
     state.selectedCategory = null;
     state.selectedProduct = null;
   } else if (viewName === "products") {
-    dom.productsSection.classList.remove("hidden");
-    dom.headerBackBtn.classList.remove("hidden");
-    dom.headerBackBtn.classList.add("flex");
-    dom.headerTitle.textContent = state.selectedCategory?.name || "Produtos";
+    dom.productsSection?.classList.remove("hidden");
+    dom.headerBackBtn?.classList.remove("hidden");
+    dom.headerBackBtn?.classList.add("flex");
+    if (dom.headerTitle) dom.headerTitle.textContent = state.selectedCategory?.name || "Produtos";
     state.selectedProduct = null;
   } else if (viewName === "details") {
-    dom.detailsSection.classList.remove("hidden");
-    dom.headerBackBtn.classList.remove("hidden");
-    dom.headerBackBtn.classList.add("flex");
-    dom.headerTitle.textContent = "Detalhes";
+    dom.detailsSection?.classList.remove("hidden");
+    dom.headerBackBtn?.classList.remove("hidden");
+    dom.headerBackBtn?.classList.add("flex");
+    if (dom.headerTitle) dom.headerTitle.textContent = "Detalhes";
   }
 
   refreshIcons();
@@ -131,7 +131,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function setupNavigationEvents() {
   // Botão voltar do topo
-  dom.headerBackBtn.addEventListener("click", () => {
+  dom.headerBackBtn?.addEventListener("click", () => {
     if (state.currentView === "details") {
       setView("products");
     } else if (state.currentView === "products") {
@@ -140,36 +140,36 @@ function setupNavigationEvents() {
   });
 
   // Botão trocar categoria na tela de produtos
-  dom.clearCategoryBtn.addEventListener("click", () => {
+  dom.clearCategoryBtn?.addEventListener("click", () => {
     setView("categories");
   });
 
   // Botão voltar ao catálogo na tela de detalhes
-  dom.backToCarouselBtn.addEventListener("click", () => {
+  dom.backToCarouselBtn?.addEventListener("click", () => {
     setView("products");
   });
 
   // Botão Comprar na Loja Oficial
-  dom.addToCartBtn.addEventListener("click", handleAddToCart);
+  dom.addToCartBtn?.addEventListener("click", handleAddToCart);
 }
 
 // Handler de validação antes de redirecionar para a loja oficial
 function handleAddToCart() {
   // Se ainda não houver variação/opções definidas
   if (!state.selectedVariation || !state.selectedVariation.addToCartLink) {
-    const sizeSelected = !!dom.sizeSelect.value;
-    const colorSelected = !!dom.colorSelect.value;
+    const sizeSelected = !!dom.sizeSelect?.value;
+    const colorSelected = !!dom.colorSelect?.value;
 
     let pendingMsg = "Defina o tamanho e a cor antes de continuar.";
     if (!sizeSelected && !colorSelected) {
       pendingMsg = "Por favor, selecione o tamanho e a cor desejados.";
-      dom.sizeSelect.focus();
+      dom.sizeSelect?.focus();
     } else if (!sizeSelected) {
       pendingMsg = "Por favor, selecione o tamanho do produto.";
-      dom.sizeSelect.focus();
+      dom.sizeSelect?.focus();
     } else if (!colorSelected) {
       pendingMsg = "Por favor, selecione a cor do produto.";
-      dom.colorSelect.focus();
+      dom.colorSelect?.focus();
     } else if (state.selectedVariation && !state.selectedVariation.addToCartLink) {
       pendingMsg = "Esta opção está indisponível no momento.";
     }
@@ -313,19 +313,22 @@ function renderProducts(products) {
     return;
   }
 
-  // Atualizar título da categoria
-  dom.categoryTitle.textContent = state.selectedCategory ? state.selectedCategory.name : "Produtos";
+  // Atualizar título da categoria (se existir no DOM)
+  if (dom.categoryTitle) {
+    dom.categoryTitle.textContent = state.selectedCategory ? state.selectedCategory.name : "Produtos";
+  }
 
   // Renderizar carrossel de cards
-  dom.productsCarousel.innerHTML = products
-    .map((product) => {
-      const productName = product.name || product.productName || product.metaTagDescription || "Produto Mizuno";
-      const productImage = product.image || product.imageUrl || "https://via.placeholder.com/320x260?text=Mizuno";
-      const brand = product.brand || "Mizuno";
-      const formattedPrice = formatPrice(product.price);
-      const formattedListPrice = product.listPrice && product.listPrice > product.price ? formatPrice(product.listPrice) : null;
+  if (dom.productsCarousel) {
+    dom.productsCarousel.innerHTML = products
+      .map((product) => {
+        const productName = product.name || product.productName || product.metaTagDescription || "Produto Mizuno";
+        const productImage = product.image || product.imageUrl || "https://via.placeholder.com/320x260?text=Mizuno";
+        const brand = product.brand || "Mizuno";
+        const formattedPrice = formatPrice(product.price);
+        const formattedListPrice = product.listPrice && product.listPrice > product.price ? formatPrice(product.listPrice) : null;
 
-      return `
+        return `
         <div class="swiper-slide h-auto flex justify-center">
           <div class="w-full bg-white rounded-2xl border border-slate-100 shadow-card flex flex-col overflow-hidden">
             <!-- Container Imagem -->
@@ -374,8 +377,9 @@ function renderProducts(products) {
           </div>
         </div>
       `;
-    })
-    .join("");
+      })
+      .join("");
+  }
 
   refreshIcons();
 
@@ -434,27 +438,29 @@ async function viewProductDetails(btn) {
 
 function renderProductDetails(product) {
   // Marca
-  dom.productBrand.textContent = product.brand || "Mizuno";
+  if (dom.productBrand) dom.productBrand.textContent = product.brand || "Mizuno";
 
   // Nome
-  dom.productName.textContent = product.name || product.productName || "Produto Mizuno";
+  if (dom.productName) dom.productName.textContent = product.name || product.productName || "Produto Mizuno";
 
   // Descrição
-  dom.productDescription.textContent = product.description || product.metaTagDescription || "Produto oficial Mizuno com tecnologia e alta durabilidade.";
+  if (dom.productDescription) dom.productDescription.textContent = product.description || product.metaTagDescription || "Produto oficial Mizuno com tecnologia e alta durabilidade.";
 
   // Preço (da primeira variação disponível)
   const firstVariation = product.variations?.[0];
   if (firstVariation?.price) {
-    dom.productPrice.textContent = formatPrice(firstVariation.price);
+    if (dom.productPrice) dom.productPrice.textContent = formatPrice(firstVariation.price);
     if (firstVariation.listPrice && firstVariation.listPrice > firstVariation.price) {
-      dom.productListPrice.textContent = formatPrice(firstVariation.listPrice);
-      dom.productListPrice.classList.remove("hidden");
+      if (dom.productListPrice) {
+        dom.productListPrice.textContent = formatPrice(firstVariation.listPrice);
+        dom.productListPrice.classList.remove("hidden");
+      }
     } else {
-      dom.productListPrice.classList.add("hidden");
+      dom.productListPrice?.classList.add("hidden");
     }
   } else {
-    dom.productPrice.textContent = "";
-    dom.productListPrice.classList.add("hidden");
+    if (dom.productPrice) dom.productPrice.textContent = "";
+    dom.productListPrice?.classList.add("hidden");
   }
 
   // Normalizar lista de imagens
@@ -464,10 +470,12 @@ function renderProductDetails(product) {
 
   // Imagem principal
   const mainImgUrl = images[0]?.imageUrl || "https://via.placeholder.com/500x500?text=Mizuno";
-  dom.mainImage.src = mainImgUrl;
-  dom.mainImage.onerror = () => {
-    dom.mainImage.src = "https://via.placeholder.com/500x500?text=Mizuno";
-  };
+  if (dom.mainImage) {
+    dom.mainImage.src = mainImgUrl;
+    dom.mainImage.onerror = () => {
+      dom.mainImage.src = "https://via.placeholder.com/500x500?text=Mizuno";
+    };
+  }
 
   // Miniaturas
   renderThumbnails(images);
@@ -480,30 +488,32 @@ function renderProductDetails(product) {
 
 function renderThumbnails(images) {
   if (!images || images.length <= 1) {
-    dom.thumbnailsWrapper.classList.add("hidden");
+    dom.thumbnailsWrapper?.classList.add("hidden");
     return;
   }
 
-  dom.thumbnailsWrapper.classList.remove("hidden");
-  dom.thumbnailsContainer.scrollLeft = 0;
-  dom.thumbnailsContainer.innerHTML = images
-    .map(
-      (image, index) => `
-        <div
-          class="thumbnail-image ${index === 0 ? "active" : ""} w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 p-1 flex items-center justify-center cursor-pointer shrink-0 transition-all"
-          data-full-url="${image.imageUrl}"
-          onclick="changeMainImage(this)"
-        >
-          <img
-            src="${image.imageUrl}"
-            alt="Foto ${index + 1}"
-            class="max-h-full max-w-full object-contain mix-blend-multiply pointer-events-none"
-            onerror="this.src='https://via.placeholder.com/80x80?text=Foto'"
-          />
-        </div>
-      `,
-    )
-    .join("");
+  dom.thumbnailsWrapper?.classList.remove("hidden");
+  if (dom.thumbnailsContainer) {
+    dom.thumbnailsContainer.scrollLeft = 0;
+    dom.thumbnailsContainer.innerHTML = images
+      .map(
+        (image, index) => `
+          <div
+            class="thumbnail-image ${index === 0 ? "active" : ""} w-12 h-12 rounded-xl bg-slate-50 border border-slate-200 hover:border-blue-400 p-1 flex items-center justify-center cursor-pointer shrink-0 transition-all"
+            data-full-url="${image.imageUrl}"
+            onclick="changeMainImage(this)"
+          >
+            <img
+              src="${image.imageUrl}"
+              alt="Foto ${index + 1}"
+              class="max-h-full max-w-full object-contain mix-blend-multiply pointer-events-none"
+              onerror="this.src='https://via.placeholder.com/80x80?text=Foto'"
+            />
+          </div>
+        `,
+      )
+      .join("");
+  }
 }
 
 function changeMainImage(thumbnail) {
@@ -531,17 +541,21 @@ function changeMainImage(thumbnail) {
 
 function renderVariations(variations) {
   // Resetar estados
-  dom.sizeSelect.innerHTML = '<option value="">Selecione o tamanho</option>';
-  dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
-  dom.colorSelect.disabled = true;
-  dom.selectedVariationDiv.classList.add("hidden");
+  if (dom.sizeSelect) dom.sizeSelect.innerHTML = '<option value="">Selecione o tamanho</option>';
+  if (dom.colorSelect) {
+    dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
+    dom.colorSelect.disabled = true;
+  }
+  dom.selectedVariationDiv?.classList.add("hidden");
   hideVariationAlert();
   state.selectedVariation = null;
   updateCartButtonState(false);
 
   if (!variations || variations.length === 0) {
-    dom.sizeSelect.innerHTML = '<option value="" selected>Produto sem variações</option>';
-    dom.sizeSelect.disabled = true;
+    if (dom.sizeSelect) {
+      dom.sizeSelect.innerHTML = '<option value="" selected>Produto sem variações</option>';
+      dom.sizeSelect.disabled = true;
+    }
     return;
   }
 
@@ -549,21 +563,28 @@ function renderVariations(variations) {
   const uniqueNames = new Set(variations.map((v) => v.name));
 
   if (uniqueNames.size === 1 && variations.length === 1) {
-    dom.sizeSelect.innerHTML = `<option value="${variations[0].sku}" selected>Padrão / Único</option>`;
-    dom.colorSelect.innerHTML = "<option value>Padrão</option>";
-    dom.colorSelect.disabled = true;
-    dom.sizeSelect.disabled = true;
+    const singleVar = variations[0];
+    if (dom.sizeSelect) {
+      dom.sizeSelect.innerHTML = `<option value="${singleVar.sku}" selected>Padrão / Único</option>`;
+      dom.sizeSelect.disabled = true;
+    }
+    if (dom.colorSelect) {
+      dom.colorSelect.innerHTML = "<option value>Padrão</option>";
+      dom.colorSelect.disabled = true;
+    }
 
-    state.selectedVariation = variations[0];
-    dom.selectedVariationDiv.classList.remove("hidden");
-    dom.selectedVariationText.textContent = variations[0].name || "Padrão";
+    state.selectedVariation = singleVar;
+    dom.selectedVariationDiv?.classList.remove("hidden");
+    if (dom.selectedVariationText) {
+      dom.selectedVariationText.textContent = singleVar.name || "Padrão";
+    }
 
     updateCartButtonState(true);
     refreshIcons();
     return;
   }
 
-  dom.sizeSelect.disabled = false;
+  if (dom.sizeSelect) dom.sizeSelect.disabled = false;
 
   // Extrair tamanhos e cores
   const sizes = new Set();
@@ -594,76 +615,86 @@ function renderVariations(variations) {
   });
 
   // Popular select de tamanho
-  dom.sizeSelect.innerHTML =
-    '<option value="">Selecione o tamanho</option>' +
-    Array.from(sizes)
-      .sort((a, b) => {
-        const aNum = parseInt(a, 10);
-        const bNum = parseInt(b, 10);
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return aNum - bNum;
+  if (dom.sizeSelect) {
+    dom.sizeSelect.innerHTML =
+      '<option value="">Selecione o tamanho</option>' +
+      Array.from(sizes)
+        .sort((a, b) => {
+          const aNum = parseInt(a, 10);
+          const bNum = parseInt(b, 10);
+          if (!isNaN(aNum) && !isNaN(bNum)) {
+            return aNum - bNum;
+          }
+          return String(a).localeCompare(String(b));
+        })
+        .map((size) => `<option value="${escapeHtml(size)}">${escapeHtml(size)}</option>`)
+        .join("");
+
+    // Event listener para tamanho
+    dom.sizeSelect.onchange = function () {
+      const selectedSize = this.value;
+
+      if (!selectedSize) {
+        if (dom.colorSelect) {
+          dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
+          dom.colorSelect.disabled = true;
         }
-        return String(a).localeCompare(String(b));
-      })
-      .map((size) => `<option value="${escapeHtml(size)}">${escapeHtml(size)}</option>`)
-      .join("");
+        dom.selectedVariationDiv?.classList.add("hidden");
+        state.selectedVariation = null;
+        updateCartButtonState(false);
+        return;
+      }
 
-  // Event listener para tamanho
-  dom.sizeSelect.onchange = function () {
-    const selectedSize = this.value;
+      hideVariationAlert();
 
-    if (!selectedSize) {
-      dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
-      dom.colorSelect.disabled = true;
-      dom.selectedVariationDiv.classList.add("hidden");
-      state.selectedVariation = null;
-      updateCartButtonState(false);
-      return;
-    }
+      // Atualizar cores disponíveis para o tamanho
+      const variationsForSize = sizeMap[selectedSize] || [];
+      const colors = new Set();
 
-    hideVariationAlert();
+      variationsForSize.forEach((variation) => {
+        colors.add(variation._resolvedColor || "Padrão");
+      });
 
-    // Atualizar cores disponíveis para o tamanho
-    const variationsForSize = sizeMap[selectedSize] || [];
-    const colors = new Set();
-
-    variationsForSize.forEach((variation) => {
-      colors.add(variation._resolvedColor || "Padrão");
-    });
-
-    if (colors.size <= 1) {
-      const onlyColor = colors.size === 1 ? Array.from(colors)[0] : "Padrão";
-      dom.colorSelect.innerHTML = `<option value="${escapeHtml(onlyColor)}" selected>${escapeHtml(onlyColor)}</option>`;
-      dom.colorSelect.disabled = false;
-      updateSelectedVariation(sizeMap);
-    } else {
-      dom.colorSelect.innerHTML =
-        '<option value="">Selecione a cor</option>' +
-        Array.from(colors)
-          .sort()
-          .map((color) => `<option value="${escapeHtml(color)}">${escapeHtml(color)}</option>`)
-          .join("");
-      dom.colorSelect.disabled = false;
-      dom.selectedVariationDiv.classList.add("hidden");
-      state.selectedVariation = null;
-      updateCartButtonState(false);
-    }
-    refreshIcons();
-  };
+      if (colors.size <= 1) {
+        const onlyColor = colors.size === 1 ? Array.from(colors)[0] : "Padrão";
+        if (dom.colorSelect) {
+          dom.colorSelect.innerHTML = `<option value="${escapeHtml(onlyColor)}" selected>${escapeHtml(onlyColor)}</option>`;
+          dom.colorSelect.disabled = false;
+        }
+        updateSelectedVariation(sizeMap);
+      } else {
+        if (dom.colorSelect) {
+          dom.colorSelect.innerHTML =
+            '<option value="">Selecione a cor</option>' +
+            Array.from(colors)
+              .sort()
+              .map((color) => `<option value="${escapeHtml(color)}">${escapeHtml(color)}</option>`)
+              .join("");
+          dom.colorSelect.disabled = false;
+        }
+        dom.selectedVariationDiv?.classList.add("hidden");
+        state.selectedVariation = null;
+        updateCartButtonState(false);
+      }
+      refreshIcons();
+    };
+  }
 
   // Event listener para cor
-  dom.colorSelect.onchange = function () {
-    hideVariationAlert();
-    updateSelectedVariation(sizeMap);
-  };
+  if (dom.colorSelect) {
+    dom.colorSelect.onchange = function () {
+      hideVariationAlert();
+      updateSelectedVariation(sizeMap);
+    };
+  }
 }
 
 function updateSelectedVariation(sizeMap) {
-  const selectedSize = dom.sizeSelect.value;
-  const selectedColor = dom.colorSelect.value;
+  const selectedSize = dom.sizeSelect?.value;
+  const selectedColor = dom.colorSelect?.value;
 
   if (!selectedSize || !selectedColor) {
-    dom.selectedVariationDiv.classList.add("hidden");
+    dom.selectedVariationDiv?.classList.add("hidden");
     state.selectedVariation = null;
     updateCartButtonState(false);
     return;
@@ -675,11 +706,13 @@ function updateSelectedVariation(sizeMap) {
   if (variation) {
     state.selectedVariation = variation;
 
-    dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedSize} - ${selectedColor}`;
-    dom.selectedVariationDiv.classList.remove("hidden");
+    if (dom.selectedVariationText) {
+      dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedSize} - ${selectedColor}`;
+    }
+    dom.selectedVariationDiv?.classList.remove("hidden");
     hideVariationAlert();
 
-    if (variation.price) {
+    if (variation.price && dom.productPrice) {
       dom.productPrice.textContent = formatPrice(variation.price);
     }
 
@@ -691,7 +724,7 @@ function updateSelectedVariation(sizeMap) {
       const matchingThumb = document.querySelector(`.thumbnail-image[data-full-url="${targetUrl}"]`);
       if (matchingThumb) {
         changeMainImage(matchingThumb);
-      } else {
+      } else if (dom.mainImage) {
         dom.mainImage.src = targetUrl;
       }
     }
@@ -706,18 +739,18 @@ function updateSelectedVariation(sizeMap) {
 
 function showLoading(show) {
   if (show) {
-    dom.loadingMessage.classList.remove("hidden");
-    dom.errorSection.classList.add("hidden");
+    dom.loadingMessage?.classList.remove("hidden");
+    dom.errorSection?.classList.add("hidden");
   } else {
-    dom.loadingMessage.classList.add("hidden");
+    dom.loadingMessage?.classList.add("hidden");
   }
 }
 
 function showError(message) {
-  dom.errorSection.classList.remove("hidden");
-  dom.errorText.textContent = message;
-  dom.categoriesSection.classList.add("hidden");
-  dom.productsSection.classList.add("hidden");
-  dom.detailsSection.classList.add("hidden");
+  dom.errorSection?.classList.remove("hidden");
+  if (dom.errorText) dom.errorText.textContent = message;
+  dom.categoriesSection?.classList.add("hidden");
+  dom.productsSection?.classList.add("hidden");
+  dom.detailsSection?.classList.add("hidden");
   refreshIcons();
 }
