@@ -437,7 +437,7 @@ function renderProducts(products) {
 
               <button
                 class="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-glow flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                data-product-id="${product.productId}"
+                data-product-ids="${(product.productIds || [product.productId]).join(",")}"
                 onclick="viewProductDetails(this)"
               >
                 <i data-lucide="eye" class="w-3.5 h-3.5"></i>
@@ -479,10 +479,10 @@ function renderProducts(products) {
 
 async function viewProductDetails(btn) {
   try {
-    const productId = btn.dataset.productId;
+    const productIds = btn.dataset.productIds || btn.dataset.productId;
     showLoading(true);
 
-    const response = await fetch(`/api/catalog/product-details?productId=${productId}`);
+    const response = await fetch(`/api/catalog/product-details?productId=${encodeURIComponent(productIds)}`);
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -495,7 +495,7 @@ async function viewProductDetails(btn) {
     }
 
     state.productDetails = data;
-    state.selectedProduct = productId;
+    state.selectedProduct = productIds;
     renderProductDetails(data);
     setView("details");
   } catch (error) {
@@ -609,12 +609,16 @@ function changeMainImage(thumbnail) {
   };
 }
 
+// Fluxo Cor -> Tamanho: trocar a cor atualiza a galeria de imagens correspondente
 function renderVariations(variations) {
   // Resetar estados
-  if (dom.sizeSelect) dom.sizeSelect.innerHTML = '<option value="">Selecione o tamanho</option>';
   if (dom.colorSelect) {
     dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
-    dom.colorSelect.disabled = true;
+    dom.colorSelect.disabled = false;
+  }
+  if (dom.sizeSelect) {
+    dom.sizeSelect.innerHTML = '<option value="">Selecione o tamanho</option>';
+    dom.sizeSelect.disabled = true;
   }
   dom.selectedVariationDiv?.classList.add("hidden");
   hideVariationAlert();
@@ -622,31 +626,31 @@ function renderVariations(variations) {
   updateCartButtonState(false);
 
   if (!variations || variations.length === 0) {
-    if (dom.sizeSelect) {
-      dom.sizeSelect.innerHTML = '<option value="" selected>Produto sem variações</option>';
-      dom.sizeSelect.disabled = true;
+    if (dom.colorSelect) {
+      dom.colorSelect.innerHTML = '<option value="" selected>Produto sem variações</option>';
+      dom.colorSelect.disabled = true;
     }
     return;
   }
 
-  // Se houver apenas uma variação simples
-  const uniqueNames = new Set(variations.map((v) => v.name));
-
-  if (uniqueNames.size === 1 && variations.length === 1) {
+  // Único SKU disponível para o produto
+  if (variations.length === 1) {
     const singleVar = variations[0];
-    if (dom.sizeSelect) {
-      dom.sizeSelect.innerHTML = `<option value="${singleVar.sku}" selected>Padrão / Único</option>`;
-      dom.sizeSelect.disabled = true;
-    }
+    const colorLabel = singleVar.color || "Padrão";
+    const sizeLabel = singleVar.size || "Único";
     if (dom.colorSelect) {
-      dom.colorSelect.innerHTML = "<option value>Padrão</option>";
+      dom.colorSelect.innerHTML = `<option value="${escapeHtml(colorLabel)}" selected>${escapeHtml(colorLabel)}</option>`;
       dom.colorSelect.disabled = true;
+    }
+    if (dom.sizeSelect) {
+      dom.sizeSelect.innerHTML = `<option value="${singleVar.sku}" selected>${escapeHtml(sizeLabel)}</option>`;
+      dom.sizeSelect.disabled = true;
     }
 
     state.selectedVariation = singleVar;
     dom.selectedVariationDiv?.classList.remove("hidden");
     if (dom.selectedVariationText) {
-      dom.selectedVariationText.textContent = singleVar.name || "Padrão";
+      dom.selectedVariationText.textContent = singleVar.nameComplete || singleVar.name || "Opção Padrão";
     }
 
     updateCartButtonState(true);
@@ -654,60 +658,27 @@ function renderVariations(variations) {
     return;
   }
 
-  if (dom.sizeSelect) dom.sizeSelect.disabled = false;
-
-  // Extrair tamanhos e cores
-  const sizes = new Set();
-  const sizeMap = {};
-
+  // Agrupar variações por cor (cada cor pode ter sua própria galeria de imagens)
+  const colorGroups = {};
   variations.forEach((variation) => {
-    let size = variation.size;
-    let color = variation.color;
-
-    if (!size) {
-      const match = (variation.name || "").match(/^(\d+)/);
-      size = match ? match[1] : variation.name || variation.nameComplete;
-    }
-
-    if (!color) {
-      const match = (variation.name || "").match(/\s+(.+)$/);
-      color = match ? match[1] : "Padrão";
-    }
-
-    variation._resolvedSize = size;
+    const color = variation.color || "Padrão";
     variation._resolvedColor = color;
-
-    sizes.add(size);
-    if (!sizeMap[size]) {
-      sizeMap[size] = [];
-    }
-    sizeMap[size].push(variation);
+    if (!colorGroups[color]) colorGroups[color] = [];
+    colorGroups[color].push(variation);
   });
 
-  // Popular select de tamanho
-  if (dom.sizeSelect) {
-    dom.sizeSelect.innerHTML =
-      '<option value="">Selecione o tamanho</option>' +
-      Array.from(sizes)
-        .sort((a, b) => {
-          const aNum = parseInt(a, 10);
-          const bNum = parseInt(b, 10);
-          if (!isNaN(aNum) && !isNaN(bNum)) {
-            return aNum - bNum;
-          }
-          return String(a).localeCompare(String(b));
-        })
-        .map((size) => `<option value="${escapeHtml(size)}">${escapeHtml(size)}</option>`)
-        .join("");
+  const colors = Object.keys(colorGroups);
 
-    // Event listener para tamanho
-    dom.sizeSelect.onchange = function () {
-      const selectedSize = this.value;
+  if (dom.colorSelect) {
+    dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>' + colors.map((color) => `<option value="${escapeHtml(color)}">${escapeHtml(color)}</option>`).join("");
 
-      if (!selectedSize) {
-        if (dom.colorSelect) {
-          dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
-          dom.colorSelect.disabled = true;
+    dom.colorSelect.onchange = function () {
+      const selectedColor = this.value;
+
+      if (!selectedColor) {
+        if (dom.sizeSelect) {
+          dom.sizeSelect.innerHTML = '<option value="">Selecione o tamanho</option>';
+          dom.sizeSelect.disabled = true;
         }
         dom.selectedVariationDiv?.classList.add("hidden");
         state.selectedVariation = null;
@@ -717,89 +688,70 @@ function renderVariations(variations) {
 
       hideVariationAlert();
 
-      // Atualizar cores disponíveis para o tamanho
-      const variationsForSize = sizeMap[selectedSize] || [];
-      const colors = new Set();
+      const variationsForColor = colorGroups[selectedColor] || [];
 
-      variationsForSize.forEach((variation) => {
-        colors.add(variation._resolvedColor || "Padrão");
-      });
-
-      if (colors.size <= 1) {
-        const onlyColor = colors.size === 1 ? Array.from(colors)[0] : "Padrão";
-        if (dom.colorSelect) {
-          dom.colorSelect.innerHTML = `<option value="${escapeHtml(onlyColor)}" selected>${escapeHtml(onlyColor)}</option>`;
-          dom.colorSelect.disabled = false;
-        }
-        updateSelectedVariation(sizeMap);
-      } else {
-        if (dom.colorSelect) {
-          dom.colorSelect.innerHTML =
-            '<option value="">Selecione a cor</option>' +
-            Array.from(colors)
-              .sort()
-              .map((color) => `<option value="${escapeHtml(color)}">${escapeHtml(color)}</option>`)
-              .join("");
-          dom.colorSelect.disabled = false;
-        }
-        dom.selectedVariationDiv?.classList.add("hidden");
-        state.selectedVariation = null;
-        updateCartButtonState(false);
+      // Trocar a galeria de imagens para a cor selecionada
+      const colorImages = variationsForColor.find((v) => v.images && v.images.length > 0)?.images;
+      if (colorImages && colorImages.length > 0) {
+        renderThumbnails(colorImages);
+        if (dom.mainImage) dom.mainImage.src = colorImages[0].imageUrl;
       }
+
+      // Popular tamanhos disponíveis para a cor selecionada
+      if (dom.sizeSelect) {
+        dom.sizeSelect.innerHTML =
+          '<option value="">Selecione o tamanho</option>' +
+          variationsForColor
+            .slice()
+            .sort((a, b) => {
+              const aNum = parseInt(a.size, 10);
+              const bNum = parseInt(b.size, 10);
+              if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+              return String(a.size).localeCompare(String(b.size));
+            })
+            .map((v) => `<option value="${escapeHtml(v.size || v.sku)}">${escapeHtml(v.size || v.sku)}</option>`)
+            .join("");
+        dom.sizeSelect.disabled = false;
+      }
+
+      dom.selectedVariationDiv?.classList.add("hidden");
+      state.selectedVariation = null;
+      updateCartButtonState(false);
       refreshIcons();
     };
   }
 
-  // Event listener para cor
-  if (dom.colorSelect) {
-    dom.colorSelect.onchange = function () {
+  if (dom.sizeSelect) {
+    dom.sizeSelect.onchange = function () {
       hideVariationAlert();
-      updateSelectedVariation(sizeMap);
-    };
-  }
-}
+      const selectedColor = dom.colorSelect?.value;
+      const selectedSize = this.value;
 
-function updateSelectedVariation(sizeMap) {
-  const selectedSize = dom.sizeSelect?.value;
-  const selectedColor = dom.colorSelect?.value;
-
-  if (!selectedSize || !selectedColor) {
-    dom.selectedVariationDiv?.classList.add("hidden");
-    state.selectedVariation = null;
-    updateCartButtonState(false);
-    return;
-  }
-
-  const variationsForSize = sizeMap?.[selectedSize] || [];
-  const variation = variationsForSize.find((v) => v._resolvedColor === selectedColor) || variationsForSize[0];
-
-  if (variation) {
-    state.selectedVariation = variation;
-
-    if (dom.selectedVariationText) {
-      dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedSize} - ${selectedColor}`;
-    }
-    dom.selectedVariationDiv?.classList.remove("hidden");
-    hideVariationAlert();
-
-    if (variation.price && dom.productPrice) {
-      dom.productPrice.textContent = formatPrice(variation.price);
-    }
-
-    updateCartButtonState(true);
-
-    // Se a variação tem imagens específicas, trocar e sincronizar miniatura
-    if (variation.images && variation.images.length > 0 && variation.images[0].imageUrl) {
-      const targetUrl = variation.images[0].imageUrl;
-      const matchingThumb = document.querySelector(`.thumbnail-image[data-full-url="${targetUrl}"]`);
-      if (matchingThumb) {
-        changeMainImage(matchingThumb);
-      } else if (dom.mainImage) {
-        dom.mainImage.src = targetUrl;
+      if (!selectedColor || !selectedSize) {
+        dom.selectedVariationDiv?.classList.add("hidden");
+        state.selectedVariation = null;
+        updateCartButtonState(false);
+        return;
       }
-    }
 
-    refreshIcons();
+      const variationsForColor = colorGroups[selectedColor] || [];
+      const variation = variationsForColor.find((v) => String(v.size) === selectedSize) || variationsForColor.find((v) => v.sku === selectedSize);
+
+      if (variation) {
+        state.selectedVariation = variation;
+        if (dom.selectedVariationText) {
+          dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedColor} - ${selectedSize}`;
+        }
+        dom.selectedVariationDiv?.classList.remove("hidden");
+
+        if (variation.price && dom.productPrice) {
+          dom.productPrice.textContent = formatPrice(variation.price);
+        }
+
+        updateCartButtonState(true);
+      }
+      refreshIcons();
+    };
   }
 }
 

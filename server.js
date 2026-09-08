@@ -264,6 +264,22 @@ function mapVtexProduct(product) {
   };
 }
 
+// Agrupa produtos com o mesmo nome (a VTEX retorna um produto por cor) em um único card
+function groupProductsByName(rawProducts) {
+  const groups = new Map();
+
+  rawProducts.forEach((product) => {
+    const key = (product.productName || product.name || product.productTitle || product.metaTagDescription || "").trim().toLowerCase();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(product);
+  });
+
+  return Array.from(groups.values()).map((group) => ({
+    ...mapVtexProduct(group[0]),
+    productIds: group.map((p) => String(p.productId)),
+  }));
+}
+
 // Endpoint: buscar produtos por categoria
 app.get("/api/catalog/products", async (req, res) => {
   try {
@@ -292,7 +308,7 @@ app.get("/api/catalog/products", async (req, res) => {
       },
     });
 
-    const products = response.data.map(mapVtexProduct);
+    const products = groupProductsByName(response.data);
     console.log("Produtos mapeados:", products);
 
     res.json({
@@ -338,7 +354,7 @@ app.get("/api/catalog/search", async (req, res) => {
       },
     });
 
-    const products = response.data.map(mapVtexProduct);
+    const products = groupProductsByName(response.data);
     console.log(`Produtos encontrados para "${query}":`, products.length);
 
     res.json({
@@ -375,35 +391,70 @@ app.get("/api/catalog/product-details", async (req, res) => {
       });
     }
 
-    const url = `https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search?fq=productId:${productId}`;
+    // productId pode conter múltiplos IDs (um por cor) separados por vírgula
+    const ids = String(productId)
+      .split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
 
-    const response = await axios.get(url, {
-      headers: {
-        "X-VTEX-API-AppKey": VTEX_API_KEY,
-        "X-VTEX-API-AppToken": VTEX_API_TOKEN,
-      },
-    });
+    const headers = {
+      "X-VTEX-API-AppKey": VTEX_API_KEY,
+      "X-VTEX-API-AppToken": VTEX_API_TOKEN,
+    };
 
-    if (!response.data || response.data.length === 0) {
+    const responses = await Promise.all(ids.map((id) => axios.get(`https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search?fq=productId:${id}`, { headers })));
+
+    const rawProducts = responses.map((r) => r.data?.[0]).filter(Boolean);
+
+    if (rawProducts.length === 0) {
       return res.status(404).json({
         success: false,
         error: "Produto não encontrado",
       });
     }
 
-    const product = response.data[0];
+    const productsWithItems = rawProducts.filter((p) => Array.isArray(p.items) && p.items.length > 0);
 
-    // Validar se tem items
-    if (!product.items || product.items.length === 0) {
+    if (productsWithItems.length === 0) {
       return res.status(404).json({
         success: false,
         error: "Produto sem variações disponíveis",
       });
     }
 
-    // Coletar imagens únicas de todos os items
+    const mainProduct = productsWithItems[0];
+
+    // Extrair variações (SKUs com tamanho, cor, link e imagens) de todas as cores agrupadas
+    const variations = productsWithItems.flatMap((product) =>
+      product.items.map((item) => {
+        const seller = item.sellers?.[0];
+        const commertialOffer = seller?.commertialOffer || {};
+        const itemImages = (item.images || item.image || []).map((img) => ({
+          imageUrl: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
+          url: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
+        }));
+
+        const size = (Array.isArray(item.Tamanho) && item.Tamanho[0]) || null;
+        const color = (Array.isArray(item.Cor) && item.Cor[0]) || null;
+
+        return {
+          sku: item.itemId,
+          name: item.name,
+          nameComplete: item.nameComplete,
+          size: size,
+          color: color,
+          price: commertialOffer.Price || null,
+          listPrice: commertialOffer.ListPrice || null,
+          complementName: item.complementName || product.complementName,
+          addToCartLink: seller?.addToCartLink || null,
+          images: itemImages,
+        };
+      }),
+    );
+
+    // Coletar imagens únicas do produto/cor padrão (primeiro da lista) para a galeria inicial
     const imagesMap = new Map();
-    product.items.forEach((item) => {
+    mainProduct.items.forEach((item) => {
       const itemImages = item.images || item.image || [];
       if (Array.isArray(itemImages)) {
         itemImages.forEach((img) => {
@@ -412,7 +463,7 @@ app.get("/api/catalog/product-details", async (req, res) => {
             imagesMap.set(url, {
               imageUrl: url,
               url: url,
-              text: (typeof img === "object" && (img.imageText || img.text)) || product.productName || "",
+              text: (typeof img === "object" && (img.imageText || img.text)) || mainProduct.productName || "",
             });
           }
         });
@@ -421,48 +472,22 @@ app.get("/api/catalog/product-details", async (req, res) => {
 
     const images = Array.from(imagesMap.values()).slice(0, 8);
 
-    if (images.length === 0 && product.image) {
-      const fallbackUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
+    if (images.length === 0 && mainProduct.image) {
+      const fallbackUrl = typeof mainProduct.image === "object" ? mainProduct.image.imageUrl || mainProduct.image.url : mainProduct.image;
       images.push({
         imageUrl: fallbackUrl,
         url: fallbackUrl,
-        text: product.productName || "",
+        text: mainProduct.productName || "",
       });
     }
 
-    // Extrair variações (SKUs com tamanho, cor, link e imagens)
-    const variations = product.items.map((item) => {
-      const seller = item.sellers?.[0];
-      const commertialOffer = seller?.commertialOffer || {};
-      const itemImages = (item.images || item.image || []).map((img) => ({
-        imageUrl: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
-        url: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
-      }));
-
-      const size = (Array.isArray(item.Tamanho) && item.Tamanho[0]) || null;
-      const color = (Array.isArray(item.Cor) && item.Cor[0]) || null;
-
-      return {
-        sku: item.itemId,
-        name: item.name,
-        nameComplete: item.nameComplete,
-        size: size,
-        color: color,
-        price: commertialOffer.Price || null,
-        listPrice: commertialOffer.ListPrice || null,
-        complementName: item.complementName || product.complementName,
-        addToCartLink: seller?.addToCartLink || null,
-        images: itemImages,
-      };
-    });
-
     res.json({
       success: true,
-      productId: product.productId,
-      name: product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno",
-      brand: product.brand || "Mizuno",
-      description: product.description || product.metaTagDescription || "",
-      complementName: product.complementName,
+      productId: mainProduct.productId,
+      name: mainProduct.productName || mainProduct.name || mainProduct.productTitle || mainProduct.metaTagDescription || "Produto Mizuno",
+      brand: mainProduct.brand || "Mizuno",
+      description: mainProduct.description || mainProduct.metaTagDescription || "",
+      complementName: mainProduct.complementName,
       images,
       variations,
     });
