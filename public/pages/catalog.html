@@ -100,7 +100,27 @@
               <span>Categorias</span>
             </div>
             <h2 class="text-xl font-extrabold text-slate-900 leading-tight">Escolha o que procura</h2>
-            <p class="text-xs text-slate-500 mt-0.5">Selecione uma categoria para ver os modelos</p>
+            <p class="text-xs text-slate-500 mt-0.5">Selecione uma categoria ou pesquise por um produto</p>
+          </div>
+
+          <!-- Barra de Pesquisa -->
+          <div class="relative mb-4">
+            <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+            <input
+              type="search"
+              id="searchInput"
+              placeholder="Buscar produtos..."
+              autocomplete="off"
+              class="w-full pl-9 pr-9 py-2.5 bg-white border border-slate-200 rounded-xl text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 shadow-xs"
+            />
+            <button
+              id="searchClearBtn"
+              type="button"
+              class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
+              aria-label="Limpar busca"
+            >
+              <i data-lucide="x" class="w-3 h-3"></i>
+            </button>
           </div>
 
           <div id="categoriesContainer" class="grid grid-cols-2 gap-2.5">

@@ -12,6 +12,8 @@ const state = {
   products: [],
   productDetails: null,
   swiperInstance: null,
+  searchQuery: null,
+  searchDebounceTimer: null,
 };
 
 // Elementos do DOM
@@ -23,6 +25,8 @@ const dom = {
 
   categoriesSection: document.getElementById("categoriesSection"),
   categoriesContainer: document.getElementById("categoriesContainer"),
+  searchInput: document.getElementById("searchInput"),
+  searchClearBtn: document.getElementById("searchClearBtn"),
 
   productsSection: document.getElementById("productsSection"),
   productsCarousel: document.getElementById("productsCarousel"),
@@ -102,11 +106,14 @@ function setView(viewName) {
     if (dom.headerTitle) dom.headerTitle.textContent = "Catálogo Mizuno";
     state.selectedCategory = null;
     state.selectedProduct = null;
+    state.searchQuery = null;
+    if (dom.searchInput) dom.searchInput.value = "";
+    dom.searchClearBtn?.classList.add("hidden");
   } else if (viewName === "products") {
     dom.productsSection?.classList.remove("hidden");
     dom.headerBackBtn?.classList.remove("hidden");
     dom.headerBackBtn?.classList.add("flex");
-    if (dom.headerTitle) dom.headerTitle.textContent = state.selectedCategory?.name || "Produtos";
+    if (dom.headerTitle) dom.headerTitle.textContent = state.searchQuery ? `Busca: "${state.searchQuery}"` : state.selectedCategory?.name || "Produtos";
     state.selectedProduct = null;
   } else if (viewName === "details") {
     dom.detailsSection?.classList.remove("hidden");
@@ -151,6 +158,34 @@ function setupNavigationEvents() {
 
   // Botão Comprar na Loja Oficial
   dom.addToCartBtn?.addEventListener("click", handleAddToCart);
+
+  // Barra de pesquisa por nome do produto
+  dom.searchInput?.addEventListener("input", () => {
+    const value = dom.searchInput.value;
+    dom.searchClearBtn?.classList.toggle("hidden", !value);
+
+    clearTimeout(state.searchDebounceTimer);
+    state.searchDebounceTimer = setTimeout(() => {
+      if (value.trim().length >= 2) {
+        searchProducts(value.trim());
+      }
+    }, 500);
+  });
+
+  dom.searchInput?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      clearTimeout(state.searchDebounceTimer);
+      const value = dom.searchInput.value.trim();
+      if (value.length >= 2) searchProducts(value);
+    }
+  });
+
+  dom.searchClearBtn?.addEventListener("click", () => {
+    if (dom.searchInput) dom.searchInput.value = "";
+    dom.searchClearBtn.classList.add("hidden");
+    dom.searchInput?.focus();
+  });
 }
 
 // Handler de validação antes de redirecionar para a loja oficial
@@ -272,6 +307,7 @@ function selectCategory(btn) {
     categoryId: btn.dataset.categoryId,
     name: btn.dataset.categoryName,
   };
+  state.searchQuery = null;
 
   loadProducts(state.selectedCategory.categoryId);
 }
@@ -307,15 +343,49 @@ async function loadProducts(categoryId) {
   }
 }
 
+// ============================================================
+// PESQUISA DE PRODUTOS POR NOME
+// ============================================================
+
+async function searchProducts(query) {
+  try {
+    showLoading(true);
+
+    const response = await fetch(`/api/catalog/search?query=${encodeURIComponent(query)}`);
+
+    if (!response.ok) {
+      throw new Error(`Erro HTTP: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || "Erro ao buscar produtos");
+    }
+
+    state.selectedCategory = null;
+    state.searchQuery = query;
+    state.products = data.products || [];
+    renderProducts(state.products);
+    setView("products");
+  } catch (error) {
+    console.error("Erro ao buscar produtos:", error);
+    showError(`Erro ao buscar produtos: ${error.message}`);
+  } finally {
+    showLoading(false);
+  }
+}
+
 function renderProducts(products) {
   if (!products || products.length === 0) {
-    showError("Nenhum produto encontrado nesta categoria no momento.");
+    const emptyMessage = state.searchQuery ? `Nenhum produto encontrado para "${state.searchQuery}".` : "Nenhum produto encontrado nesta categoria no momento.";
+    showError(emptyMessage);
     return;
   }
 
   // Atualizar título da categoria (se existir no DOM)
   if (dom.categoryTitle) {
-    dom.categoryTitle.textContent = state.selectedCategory ? state.selectedCategory.name : "Produtos";
+    dom.categoryTitle.textContent = state.searchQuery ? `Busca: "${state.searchQuery}"` : state.selectedCategory ? state.selectedCategory.name : "Produtos";
   }
 
   // Renderizar carrossel de cards
@@ -339,7 +409,7 @@ function renderProducts(products) {
               <img
                 src="${productImage}"
                 alt="${escapeHtml(productName)}"
-                class="max-h-36 w-auto max-w-full object-cover mix-blend-multiply transition-transform duration-200"
+                class="max-h-36 w-[80%] max-w-full object-cover mix-blend-multiply transition-transform duration-200"
                 onerror="this.src='https://via.placeholder.com/320x260?text=Mizuno'"
                 loading="lazy"
               />

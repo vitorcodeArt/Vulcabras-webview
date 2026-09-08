@@ -215,6 +215,55 @@ app.get("/api/catalog/categories", (req, res) => {
   });
 });
 
+// Mapeia o retorno cru da VTEX para os campos usados pelo catálogo
+function mapVtexProduct(product) {
+  let imageUrl = null;
+  let price = null;
+  let listPrice = null;
+
+  // Buscar a primeira imagem válida em todos os items
+  if (Array.isArray(product.items)) {
+    for (const item of product.items) {
+      const itemImages = item.images || item.image || [];
+      if (Array.isArray(itemImages) && itemImages.length > 0) {
+        for (const img of itemImages) {
+          const url = typeof img === "object" ? img?.imageUrl || img?.url : img;
+          if (url && typeof url === "string" && url.trim().length > 0) {
+            imageUrl = url.trim();
+            break;
+          }
+        }
+      }
+      if (imageUrl) break;
+    }
+
+    // Buscar preços
+    const firstSeller = product.items[0]?.sellers?.[0];
+    if (firstSeller?.commertialOffer) {
+      price = firstSeller.commertialOffer.Price || null;
+      listPrice = firstSeller.commertialOffer.ListPrice || null;
+    }
+  }
+
+  // Fallback para raiz do produto
+  if (!imageUrl && product.image) {
+    imageUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
+  }
+
+  const productName = product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno";
+
+  return {
+    productId: product.productId,
+    name: productName,
+    brand: product.brand || "Mizuno",
+    metaTagDescription: product.metaTagDescription || "",
+    price: price,
+    listPrice: listPrice,
+    image: imageUrl,
+    imageUrl: imageUrl,
+  };
+}
+
 // Endpoint: buscar produtos por categoria
 app.get("/api/catalog/products", async (req, res) => {
   try {
@@ -243,54 +292,7 @@ app.get("/api/catalog/products", async (req, res) => {
       },
     });
 
-    // Mapear apenas dados necessários
-    const products = response.data.map((product) => {
-      let imageUrl = null;
-      let price = null;
-      let listPrice = null;
-
-      // Buscar a primeira imagem válida em todos os items
-      if (Array.isArray(product.items)) {
-        for (const item of product.items) {
-          const itemImages = item.images || item.image || [];
-          if (Array.isArray(itemImages) && itemImages.length > 0) {
-            for (const img of itemImages) {
-              const url = typeof img === "object" ? img?.imageUrl || img?.url : img;
-              if (url && typeof url === "string" && url.trim().length > 0) {
-                imageUrl = url.trim();
-                break;
-              }
-            }
-          }
-          if (imageUrl) break;
-        }
-
-        // Buscar preços
-        const firstSeller = product.items[0]?.sellers?.[0];
-        if (firstSeller?.commertialOffer) {
-          price = firstSeller.commertialOffer.Price || null;
-          listPrice = firstSeller.commertialOffer.ListPrice || null;
-        }
-      }
-
-      // Fallback para raiz do produto
-      if (!imageUrl && product.image) {
-        imageUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
-      }
-
-      const productName = product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno";
-
-      return {
-        productId: product.productId,
-        name: productName,
-        brand: product.brand || "Mizuno",
-        metaTagDescription: product.metaTagDescription || "",
-        price: price,
-        listPrice: listPrice,
-        image: imageUrl,
-        imageUrl: imageUrl,
-      };
-    });
+    const products = response.data.map(mapVtexProduct);
     console.log("Produtos mapeados:", products);
 
     res.json({
@@ -299,6 +301,52 @@ app.get("/api/catalog/products", async (req, res) => {
     });
   } catch (error) {
     console.error("Erro ao buscar produtos VTEX:");
+    console.error(error.response?.data || error.message);
+
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data || error.message,
+    });
+  }
+});
+
+// Endpoint: buscar produtos por nome/termo de pesquisa
+app.get("/api/catalog/search", async (req, res) => {
+  try {
+    const { query } = req.query;
+
+    if (!query || !query.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: "query é obrigatório",
+      });
+    }
+
+    if (!VTEX_STORE_URL || !VTEX_API_KEY || !VTEX_API_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error: "Credenciais VTEX não configuradas",
+      });
+    }
+
+    const url = `https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search/${encodeURIComponent(query.trim())}`;
+
+    const response = await axios.get(url, {
+      headers: {
+        "X-VTEX-API-AppKey": VTEX_API_KEY,
+        "X-VTEX-API-AppToken": VTEX_API_TOKEN,
+      },
+    });
+
+    const products = response.data.map(mapVtexProduct);
+    console.log(`Produtos encontrados para "${query}":`, products.length);
+
+    res.json({
+      success: true,
+      products,
+    });
+  } catch (error) {
+    console.error("Erro ao buscar produtos VTEX por nome:");
     console.error(error.response?.data || error.message);
 
     res.status(error.response?.status || 500).json({
