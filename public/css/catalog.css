@@ -8,7 +8,7 @@ html {
 }
 
 #thumbnailsContainer {
-  scrollbar-width: thin;
+  scrollbar-width: none;
   scrollbar-color: #d9e4ff #f1f5f9;
 }
 /* Botões de Categoria */
