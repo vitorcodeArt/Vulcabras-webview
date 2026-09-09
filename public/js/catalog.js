@@ -75,6 +75,7 @@ const dom = {
   productPrice: document.getElementById("productPrice"),
   productListPrice: document.getElementById("productListPrice"),
   productDescription: document.getElementById("productDescription"),
+  descriptionToggleBtn: document.getElementById("descriptionToggleBtn"), // ADICIONAR ESTA LINHA
   sizeSelect: document.getElementById("sizeSelect"),
   colorSelect: document.getElementById("colorSelect"),
   selectedVariationDiv: document.getElementById("selectedVariationDiv"),
@@ -542,12 +543,42 @@ async function viewProductDetails(btn) {
   }
 }
 
+function renderDescription(text) {
+  if (!dom.productDescription) return;
+
+  dom.productDescription.textContent = text;
+  dom.productDescription.classList.add("line-clamp-2");
+
+  if (dom.descriptionToggleBtn) {
+    dom.descriptionToggleBtn.textContent = "Ver mais";
+    dom.descriptionToggleBtn.classList.add("hidden");
+    dom.descriptionToggleBtn.onclick = null;
+  }
+
+  // Espera o layout renderizar pra medir se o texto realmente estoura 2 linhas
+  requestAnimationFrame(() => {
+    const isOverflowing = dom.productDescription.scrollHeight > dom.productDescription.clientHeight + 1;
+
+    if (isOverflowing && dom.descriptionToggleBtn) {
+      dom.descriptionToggleBtn.classList.remove("hidden");
+      let expanded = false;
+
+      dom.descriptionToggleBtn.onclick = () => {
+        expanded = !expanded;
+        dom.productDescription.classList.toggle("line-clamp-2", !expanded);
+        dom.descriptionToggleBtn.textContent = expanded ? "Ver menos" : "Ver mais";
+        refreshIcons();
+      };
+    }
+  });
+}
+
 function renderProductDetails(product) {
   if (dom.productBrand) dom.productBrand.textContent = product.brand || storeInfo.label;
 
   if (dom.productName) dom.productName.textContent = product.name || product.productName || `Produto ${storeInfo.label}`;
 
-  if (dom.productDescription) dom.productDescription.textContent = product.description || product.metaTagDescription || `Produto oficial ${storeInfo.label} com tecnologia e alta durabilidade.`;
+  renderDescription(product.description || product.metaTagDescription || `Produto oficial ${storeInfo.label} com tecnologia e alta durabilidade.`);
 
   const firstVariation = product.variations?.[0];
   if (firstVariation?.price) {
