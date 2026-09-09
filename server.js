@@ -118,7 +118,7 @@ app.get("/api/tracking", (req, res) => {
 
 app.post("/api/send-webview", async (req, res) => {
   try {
-    const { conversationId, type = "tracking", customText, buttonText } = req.body;
+    const { conversationId, type = "tracking", store = "mizuno", customText, buttonText } = req.body;
 
     if (!conversationId) {
       return res.status(400).json({
@@ -134,21 +134,33 @@ app.post("/api/send-webview", async (req, res) => {
       });
     }
 
-    // Obter URL base
+    const isCatalog = type === "catalog";
+    const storeKey = String(store || "mizuno").toLowerCase();
+
+    // valida a loja apenas quando o fluxo for de catálogo
+    if (isCatalog && !VTEX_STORES[storeKey]) {
+      return res.status(400).json({
+        success: false,
+        error: `Loja "${storeKey}" inválida. Opções: ${Object.keys(VTEX_STORES).join(", ")}`,
+      });
+    }
+
     const baseUrl = process.env.WEBVIEW_URL ? process.env.WEBVIEW_URL.replace(/\/(webview|catalog)\/?$/, "") : `http://localhost:${PORT}`;
 
-    const isCatalog = type === "catalog";
     const targetPath = isCatalog ? "catalog" : "webview";
-    const uri = `${baseUrl}/${targetPath}?conversationId=${encodeURIComponent(conversationId)}`;
 
-    const messageText = customText || (isCatalog ? "Confira o nosso catálogo de produtos:" : "Consulte o rastreamento do seu pedido:");
+    const params = new URLSearchParams({ conversationId });
+    if (isCatalog) params.set("store", storeKey);
 
+    const uri = `${baseUrl}/${targetPath}?${params.toString()}`;
+
+    const storeLabel = isCatalog ? VTEX_STORES[storeKey].label : null;
+
+    const messageText = customText || (isCatalog ? `Confira o nosso catálogo ${storeLabel}:` : "Consulte o rastreamento do seu pedido:");
     const actionButtonText = buttonText || (isCatalog ? "Ver Catálogo" : "Ver rastreamento");
 
     const payload = {
-      author: {
-        type: "business",
-      },
+      author: { type: "business" },
       content: {
         type: "text",
         text: messageText,
@@ -164,19 +176,18 @@ app.post("/api/send-webview", async (req, res) => {
       },
     };
 
-    const response = await axios.post(`https://${ZENDESK_SUBDOMAIN}.zendesk.com/sc/v2/apps/${ZENDESK_APP_ID}/conversations/${conversationId}/messages`, payload, {
-      auth: {
-        username: ZENDESK_KEY_ID,
-        password: ZENDESK_SECRET,
-      },
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    const response = await axios.post(
+      `https://${ZENDESK_SUBDOMAIN}.zendesk.com/sc/v2/apps/${ZENDESK_APP_ID}/conversations/${conversationId}/messages`,
+      payload,
+      {
+        auth: { username: ZENDESK_KEY_ID, password: ZENDESK_SECRET },
+        headers: { "Content-Type": "application/json" },
+      }
+    );
 
     res.json({
       success: true,
-      message: `Webview (${isCatalog ? "catálogo" : "rastreamento"}) enviada com sucesso`,
+      message: `Webview (${isCatalog ? `catálogo ${storeLabel}` : "rastreamento"}) enviada com sucesso`,
       data: response.data,
     });
   } catch (error) {
@@ -194,29 +205,99 @@ app.post("/api/send-webview", async (req, res) => {
 // CATÁLOGO DE PRODUTOS (VTEX)
 // ======================================================
 
-const VTEX_STORE_URL = process.env.VTEX_STORE_URL;
-const VTEX_API_KEY = process.env.VTEX_API_KEY;
-const VTEX_API_TOKEN = process.env.VTEX_API_TOKEN;
+// Uma configuração de loja VTEX por bot/instância (Mizuno, Olympikus, Under Armour).
+// Mantém compatibilidade com as variáveis antigas VTEX_STORE_URL/API_KEY/API_TOKEN para a Mizuno.
+const VTEX_STORES = {
+  mizuno: {
+    label: "Mizuno",
+    storeUrl: process.env.VTEX_MIZUNO_STORE_URL || process.env.VTEX_STORE_URL,
+    apiKey: process.env.VTEX_MIZUNO_API_KEY || process.env.VTEX_API_KEY,
+    apiToken: process.env.VTEX_MIZUNO_API_TOKEN || process.env.VTEX_API_TOKEN,
+  },
+  olympikus: {
+    label: "Olympikus",
+    storeUrl: process.env.VTEX_OLYMPIKUS_STORE_URL,
+    apiKey: process.env.VTEX_OLYMPIKUS_API_KEY,
+    apiToken: process.env.VTEX_OLYMPIKUS_API_TOKEN,
+  },
+  underarmour: {
+    label: "Under Armour",
+    storeUrl: process.env.VTEX_UNDERARMOUR_STORE_URL,
+    apiKey: process.env.VTEX_UNDERARMOUR_API_KEY,
+    apiToken: process.env.VTEX_UNDERARMOUR_API_TOKEN,
+  },
+};
 
-// Categorias disponíveis
-const CATEGORIES = [
-  { id: "1", name: "Masculino", categoryId: "1" },
-  { id: "2", name: "Feminino", categoryId: "2" },
-  { id: "3", name: "Kids", categoryId: "3" },
-  { id: "4", name: "Esportes", categoryId: "69" },
-  { id: "5", name: "Calçados", categoryId: "74" },
-];
+// Categorias por loja (IDs específicos da árvore de categorias de cada VTEX)
+const STORE_CATEGORIES = {
+  mizuno: [
+    { id: "1", name: "Masculino", categoryId: "1" },
+    { id: "2", name: "Feminino", categoryId: "2" },
+    { id: "3", name: "Kids", categoryId: "3" },
+    { id: "4", name: "Esportes", categoryId: "69" },
+    { id: "5", name: "Calçados", categoryId: "74" },
+  ],
+  // TODO: ajustar os categoryId reais da Olympikus e Under Armour quando disponíveis
+  olympikus: [
+    { id: "1", name: "Masculino", categoryId: "1" },
+    { id: "2", name: "Feminino", categoryId: "2" },
+    { id: "3", name: "Kids", categoryId: "3" },
+    { id: "4", name: "Esportes", categoryId: "69" },
+    { id: "5", name: "Calçados", categoryId: "74" },
+  ],
+  underarmour: [
+    { id: "1", name: "Masculino", categoryId: "1" },
+    { id: "2", name: "Feminino", categoryId: "2" },
+    { id: "3", name: "Kids", categoryId: "3" },
+    { id: "4", name: "Esportes", categoryId: "69" },
+    { id: "5", name: "Calçados", categoryId: "74" },
+  ],
+};
+
+// Resolve a configuração da loja a partir de ?store= (padrão: mizuno) e valida credenciais
+function resolveStore(req, res) {
+  const storeKey = String(req.query.store || "mizuno").toLowerCase();
+  const config = VTEX_STORES[storeKey];
+
+  if (!config) {
+    res.status(400).json({
+      success: false,
+      error: `Loja "${storeKey}" inválida. Opções: ${Object.keys(VTEX_STORES).join(", ")}`,
+    });
+    return null;
+  }
+
+  if (!config.storeUrl || !config.apiKey || !config.apiToken) {
+    res.status(500).json({
+      success: false,
+      error: `Credenciais VTEX não configuradas para a loja "${storeKey}"`,
+    });
+    return null;
+  }
+
+  return { key: storeKey, ...config };
+}
 
 // Endpoint: listar categorias
 app.get("/api/catalog/categories", (req, res) => {
+  const storeKey = String(req.query.store || "mizuno").toLowerCase();
+  const categories = STORE_CATEGORIES[storeKey];
+
+  if (!categories) {
+    return res.status(400).json({
+      success: false,
+      error: `Loja "${storeKey}" inválida. Opções: ${Object.keys(STORE_CATEGORIES).join(", ")}`,
+    });
+  }
+
   res.json({
     success: true,
-    categories: CATEGORIES,
+    categories,
   });
 });
 
 // Mapeia o retorno cru da VTEX para os campos usados pelo catálogo
-function mapVtexProduct(product) {
+function mapVtexProduct(product, storeLabel) {
   let imageUrl = null;
   let price = null;
   let listPrice = null;
@@ -250,12 +331,12 @@ function mapVtexProduct(product) {
     imageUrl = typeof product.image === "object" ? product.image.imageUrl || product.image.url : product.image;
   }
 
-  const productName = product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto Mizuno";
+  const productName = product.productName || product.name || product.productTitle || product.metaTagDescription || "Produto";
 
   return {
     productId: product.productId,
     name: productName,
-    brand: product.brand || "Mizuno",
+    brand: product.brand || storeLabel || "Produto",
     metaTagDescription: product.metaTagDescription || "",
     price: price,
     listPrice: listPrice,
@@ -265,7 +346,7 @@ function mapVtexProduct(product) {
 }
 
 // Agrupa produtos com o mesmo nome (a VTEX retorna um produto por cor) em um único card
-function groupProductsByName(rawProducts) {
+function groupProductsByName(rawProducts, storeLabel) {
   const groups = new Map();
 
   rawProducts.forEach((product) => {
@@ -275,7 +356,7 @@ function groupProductsByName(rawProducts) {
   });
 
   return Array.from(groups.values()).map((group) => ({
-    ...mapVtexProduct(group[0]),
+    ...mapVtexProduct(group[0], storeLabel),
     productIds: group.map((p) => String(p.productId)),
   }));
 }
@@ -284,6 +365,8 @@ function groupProductsByName(rawProducts) {
 app.get("/api/catalog/products", async (req, res) => {
   try {
     const { categoryId } = req.query;
+    const store = resolveStore(req, res);
+    if (!store) return;
 
     if (!categoryId) {
       return res.status(400).json({
@@ -292,23 +375,16 @@ app.get("/api/catalog/products", async (req, res) => {
       });
     }
 
-    if (!VTEX_STORE_URL || !VTEX_API_KEY || !VTEX_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: "Credenciais VTEX não configuradas",
-      });
-    }
-
-    const url = `https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search?fq=C:${categoryId}`;
+    const url = `https://${store.storeUrl}/api/catalog_system/pub/products/search?fq=C:${categoryId}`;
 
     const response = await axios.get(url, {
       headers: {
-        "X-VTEX-API-AppKey": VTEX_API_KEY,
-        "X-VTEX-API-AppToken": VTEX_API_TOKEN,
+        "X-VTEX-API-AppKey": store.apiKey,
+        "X-VTEX-API-AppToken": store.apiToken,
       },
     });
 
-    const products = groupProductsByName(response.data);
+    const products = groupProductsByName(response.data, store.label);
     console.log("Produtos mapeados:", products);
 
     res.json({
@@ -330,6 +406,8 @@ app.get("/api/catalog/products", async (req, res) => {
 app.get("/api/catalog/search", async (req, res) => {
   try {
     const { query } = req.query;
+    const store = resolveStore(req, res);
+    if (!store) return;
 
     if (!query || !query.trim()) {
       return res.status(400).json({
@@ -338,23 +416,16 @@ app.get("/api/catalog/search", async (req, res) => {
       });
     }
 
-    if (!VTEX_STORE_URL || !VTEX_API_KEY || !VTEX_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: "Credenciais VTEX não configuradas",
-      });
-    }
-
-    const url = `https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search/${encodeURIComponent(query.trim())}`;
+    const url = `https://${store.storeUrl}/api/catalog_system/pub/products/search/${encodeURIComponent(query.trim())}`;
 
     const response = await axios.get(url, {
       headers: {
-        "X-VTEX-API-AppKey": VTEX_API_KEY,
-        "X-VTEX-API-AppToken": VTEX_API_TOKEN,
+        "X-VTEX-API-AppKey": store.apiKey,
+        "X-VTEX-API-AppToken": store.apiToken,
       },
     });
 
-    const products = groupProductsByName(response.data);
+    const products = groupProductsByName(response.data, store.label);
     console.log(`Produtos encontrados para "${query}":`, products.length);
 
     res.json({
@@ -376,18 +447,13 @@ app.get("/api/catalog/search", async (req, res) => {
 app.get("/api/catalog/product-details", async (req, res) => {
   try {
     const { productId } = req.query;
+    const store = resolveStore(req, res);
+    if (!store) return;
 
     if (!productId) {
       return res.status(400).json({
         success: false,
         error: "productId é obrigatório",
-      });
-    }
-
-    if (!VTEX_STORE_URL || !VTEX_API_KEY || !VTEX_API_TOKEN) {
-      return res.status(500).json({
-        success: false,
-        error: "Credenciais VTEX não configuradas",
       });
     }
 
@@ -398,11 +464,11 @@ app.get("/api/catalog/product-details", async (req, res) => {
       .filter(Boolean);
 
     const headers = {
-      "X-VTEX-API-AppKey": VTEX_API_KEY,
-      "X-VTEX-API-AppToken": VTEX_API_TOKEN,
+      "X-VTEX-API-AppKey": store.apiKey,
+      "X-VTEX-API-AppToken": store.apiToken,
     };
 
-    const responses = await Promise.all(ids.map((id) => axios.get(`https://${VTEX_STORE_URL}/api/catalog_system/pub/products/search?fq=productId:${id}`, { headers })));
+    const responses = await Promise.all(ids.map((id) => axios.get(`https://${store.storeUrl}/api/catalog_system/pub/products/search?fq=productId:${id}`, { headers })));
 
     const rawProducts = responses.map((r) => r.data?.[0]).filter(Boolean);
 
