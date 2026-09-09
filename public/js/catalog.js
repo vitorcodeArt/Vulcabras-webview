@@ -3,8 +3,22 @@
    Adaptado para Zendesk WebWidget (~400px × 600px)
    ============================================================ */
 
+// Configuração por loja (label usado em títulos, fallbacks e placeholders)
+const STORE_CONFIG = {
+  mizuno: { label: "Mizuno" },
+  olympikus: { label: "Olympikus" },
+  underarmour: { label: "Under Armour" },
+};
+
+function getStoreFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const raw = (params.get("store") || "mizuno").toLowerCase();
+  return STORE_CONFIG[raw] ? raw : "mizuno";
+}
+
 // Estado da aplicação
 const state = {
+  store: getStoreFromUrl(),
   currentView: "categories", // 'categories' | 'products' | 'details'
   selectedCategory: null,
   selectedProduct: null,
@@ -15,6 +29,24 @@ const state = {
   searchQuery: null,
   searchDebounceTimer: null,
 };
+
+const storeInfo = STORE_CONFIG[state.store];
+
+// Monta a URL da API sempre incluindo o "store" atual
+function apiUrl(path, params = {}) {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("store", state.store);
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      url.searchParams.set(key, value);
+    }
+  });
+  return url.pathname + url.search;
+}
+
+function placeholderImage(width, height) {
+  return `https://via.placeholder.com/${width}x${height}?text=${encodeURIComponent(storeInfo.label)}`;
+}
 
 // Elementos do DOM
 const dom = {
@@ -56,13 +88,15 @@ const dom = {
   errorText: document.getElementById("errorText"),
 };
 
-// Ícones por categoria
+// Ícones por categoria (cobre as categorias de todas as lojas)
 const CATEGORY_ICONS = {
   Masculino: "user",
   Feminino: "sparkles",
   Kids: "smile",
+  Infantil: "baby",
   Esportes: "trophy",
   Calçados: "footprints",
+  "Loja Vulcabras": "store",
 };
 
 // Utilitário para atualizar ícones do Lucide
@@ -88,6 +122,21 @@ function formatPrice(value) {
 }
 
 // ============================================================
+// BRANDING DA LOJA (título, badge, marca padrão)
+// ============================================================
+
+function applyStoreBranding() {
+  document.title = `Catálogo ${storeInfo.label}`;
+
+  if (window.WebviewSdk && window.WebviewSdk.hasFeature && window.WebviewSdk.hasFeature("setTitle")) {
+    window.WebviewSdk.setTitle(`Catálogo ${storeInfo.label}`);
+  }
+
+  if (dom.headerTitle) dom.headerTitle.textContent = `Catálogo ${storeInfo.label}`;
+  if (dom.productBrand) dom.productBrand.textContent = storeInfo.label;
+}
+
+// ============================================================
 // CONTROLE DE TELAS (VIEW MANAGER)
 // ============================================================
 
@@ -103,7 +152,7 @@ function setView(viewName) {
     dom.categoriesSection?.classList.remove("hidden");
     dom.headerBackBtn?.classList.add("hidden");
     dom.headerBackBtn?.classList.remove("flex");
-    if (dom.headerTitle) dom.headerTitle.textContent = "Catálogo Mizuno";
+    if (dom.headerTitle) dom.headerTitle.textContent = `Catálogo ${storeInfo.label}`;
     state.selectedCategory = null;
     state.selectedProduct = null;
     state.searchQuery = null;
@@ -131,13 +180,13 @@ function setView(viewName) {
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
+  applyStoreBranding();
   setupNavigationEvents();
   refreshIcons();
   loadCategories();
 });
 
 function setupNavigationEvents() {
-  // Botão voltar do topo
   dom.headerBackBtn?.addEventListener("click", () => {
     if (state.currentView === "details") {
       setView("products");
@@ -146,20 +195,16 @@ function setupNavigationEvents() {
     }
   });
 
-  // Botão trocar categoria na tela de produtos
   dom.clearCategoryBtn?.addEventListener("click", () => {
     setView("categories");
   });
 
-  // Botão voltar ao catálogo na tela de detalhes
   dom.backToCarouselBtn?.addEventListener("click", () => {
     setView("products");
   });
 
-  // Botão Comprar na Loja Oficial
   dom.addToCartBtn?.addEventListener("click", handleAddToCart);
 
-  // Barra de pesquisa por nome do produto
   dom.searchInput?.addEventListener("input", () => {
     const value = dom.searchInput.value;
     dom.searchClearBtn?.classList.toggle("hidden", !value);
@@ -188,9 +233,7 @@ function setupNavigationEvents() {
   });
 }
 
-// Handler de validação antes de redirecionar para a loja oficial
 function handleAddToCart() {
-  // Se ainda não houver variação/opções definidas
   if (!state.selectedVariation || !state.selectedVariation.addToCartLink) {
     const sizeSelected = !!dom.sizeSelect?.value;
     const colorSelected = !!dom.colorSelect?.value;
@@ -213,7 +256,6 @@ function handleAddToCart() {
     return;
   }
 
-  // Se estiver tudo selecionado corretamente, abre o link oficial
   hideVariationAlert();
   window.open(state.selectedVariation.addToCartLink, "_blank", "noopener,noreferrer");
 }
@@ -250,7 +292,7 @@ function updateCartButtonState(enabled) {
 async function loadCategories() {
   try {
     showLoading(true);
-    const response = await fetch("/api/catalog/categories");
+    const response = await fetch(apiUrl("/api/catalog/categories"));
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -294,7 +336,6 @@ function renderCategories(categories) {
 
   refreshIcons();
 
-  // Adicionar event listeners
   document.querySelectorAll(".category-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       selectCategory(btn);
@@ -320,7 +361,7 @@ async function loadProducts(categoryId) {
   try {
     showLoading(true);
 
-    const response = await fetch(`/api/catalog/products?categoryId=${categoryId}`);
+    const response = await fetch(apiUrl("/api/catalog/products", { categoryId }));
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -351,7 +392,7 @@ async function searchProducts(query) {
   try {
     showLoading(true);
 
-    const response = await fetch(`/api/catalog/search?query=${encodeURIComponent(query)}`);
+    const response = await fetch(apiUrl("/api/catalog/search", { query }));
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -383,25 +424,22 @@ function renderProducts(products) {
     return;
   }
 
-  // Atualizar título da categoria (se existir no DOM)
   if (dom.categoryTitle) {
     dom.categoryTitle.textContent = state.searchQuery ? `Busca: "${state.searchQuery}"` : state.selectedCategory ? state.selectedCategory.name : "Produtos";
   }
 
-  // Renderizar carrossel de cards
   if (dom.productsCarousel) {
     dom.productsCarousel.innerHTML = products
       .map((product) => {
-        const productName = product.name || product.productName || product.metaTagDescription || "Produto Mizuno";
-        const productImage = product.image || product.imageUrl || "https://via.placeholder.com/320x260?text=Mizuno";
-        const brand = product.brand || "Mizuno";
+        const productName = product.name || product.productName || product.metaTagDescription || `Produto ${storeInfo.label}`;
+        const productImage = product.image || product.imageUrl || placeholderImage(320, 260);
+        const brand = product.brand || storeInfo.label;
         const formattedPrice = formatPrice(product.price);
         const formattedListPrice = product.listPrice && product.listPrice > product.price ? formatPrice(product.listPrice) : null;
 
         return `
         <div class="swiper-slide h-auto flex justify-center">
           <div class="w-full bg-white rounded-2xl border border-slate-100 shadow-card flex flex-col overflow-hidden">
-            <!-- Container Imagem -->
             <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/60 p-4 flex items-center justify-center h-44 overflow-hidden">
               <span class="absolute top-2.5 left-2.5 px-2 py-0.5 bg-white/95 rounded-md text-[10px] font-bold uppercase tracking-wider text-slate-600 shadow-xs border border-slate-100">
                 ${escapeHtml(brand)}
@@ -410,12 +448,11 @@ function renderProducts(products) {
                 src="${productImage}"
                 alt="${escapeHtml(productName)}"
                 class="max-h-36 w-[80%] max-w-full object-cover mix-blend-multiply transition-transform duration-200"
-                onerror="this.src='https://via.placeholder.com/320x260?text=Mizuno'"
+                onerror="this.src='${placeholderImage(320, 260)}'"
                 loading="lazy"
               />
             </div>
 
-            <!-- Informações & Ação -->
             <div class="p-3.5 flex-1 flex flex-col justify-between gap-3">
               <div>
                 <h4 class="font-extrabold text-slate-900 text-xs sm:text-sm leading-snug line-clamp-2" title="${escapeHtml(productName)}">
@@ -453,7 +490,6 @@ function renderProducts(products) {
 
   refreshIcons();
 
-  // Inicializar/atualizar Swiper com botões customizados
   if (state.swiperInstance) {
     state.swiperInstance.destroy(true, true);
   }
@@ -482,7 +518,7 @@ async function viewProductDetails(btn) {
     const productIds = btn.dataset.productIds || btn.dataset.productId;
     showLoading(true);
 
-    const response = await fetch(`/api/catalog/product-details?productId=${encodeURIComponent(productIds)}`);
+    const response = await fetch(apiUrl("/api/catalog/product-details", { productId: productIds }));
 
     if (!response.ok) {
       throw new Error(`Erro HTTP: ${response.status}`);
@@ -507,16 +543,12 @@ async function viewProductDetails(btn) {
 }
 
 function renderProductDetails(product) {
-  // Marca
-  if (dom.productBrand) dom.productBrand.textContent = product.brand || "Mizuno";
+  if (dom.productBrand) dom.productBrand.textContent = product.brand || storeInfo.label;
 
-  // Nome
-  if (dom.productName) dom.productName.textContent = product.name || product.productName || "Produto Mizuno";
+  if (dom.productName) dom.productName.textContent = product.name || product.productName || `Produto ${storeInfo.label}`;
 
-  // Descrição
-  if (dom.productDescription) dom.productDescription.textContent = product.description || product.metaTagDescription || "Produto oficial Mizuno com tecnologia e alta durabilidade.";
+  if (dom.productDescription) dom.productDescription.textContent = product.description || product.metaTagDescription || `Produto oficial ${storeInfo.label} com tecnologia e alta durabilidade.`;
 
-  // Preço (da primeira variação disponível)
   const firstVariation = product.variations?.[0];
   if (firstVariation?.price) {
     if (dom.productPrice) dom.productPrice.textContent = formatPrice(firstVariation.price);
@@ -533,24 +565,19 @@ function renderProductDetails(product) {
     dom.productListPrice?.classList.add("hidden");
   }
 
-  // Normalizar lista de imagens
   const images = (product.images || []).map((img) => ({
     imageUrl: typeof img === "object" ? img?.imageUrl || img?.url || "" : img || "",
   }));
 
-  // Imagem principal
-  const mainImgUrl = images[0]?.imageUrl || "https://via.placeholder.com/500x500?text=Mizuno";
+  const mainImgUrl = images[0]?.imageUrl || placeholderImage(500, 500);
   if (dom.mainImage) {
     dom.mainImage.src = mainImgUrl;
     dom.mainImage.onerror = () => {
-      dom.mainImage.src = "https://via.placeholder.com/500x500?text=Mizuno";
+      dom.mainImage.src = placeholderImage(500, 500);
     };
   }
 
-  // Miniaturas
   renderThumbnails(images);
-
-  // Variações (tamanho e cor)
   renderVariations(product.variations || []);
 
   refreshIcons();
@@ -577,7 +604,7 @@ function renderThumbnails(images) {
               src="${image.imageUrl}"
               alt="Foto ${index + 1}"
               class="max-h-full max-w-full object-contain mix-blend-multiply pointer-events-none"
-              onerror="this.src='https://via.placeholder.com/80x80?text=Foto'"
+              onerror="this.src='${placeholderImage(80, 80)}'"
             />
           </div>
         `,
@@ -593,7 +620,6 @@ function changeMainImage(thumbnail) {
 
   thumbnail.classList.add("active");
 
-  // Scroll automático suave para centralizar/revelar a miniatura clicada à esquerda ou direita
   if (thumbnail.scrollIntoView) {
     thumbnail.scrollIntoView({
       behavior: "smooth",
@@ -609,9 +635,7 @@ function changeMainImage(thumbnail) {
   };
 }
 
-// Fluxo Cor -> Tamanho: trocar a cor atualiza a galeria de imagens correspondente
 function renderVariations(variations) {
-  // Resetar estados
   if (dom.colorSelect) {
     dom.colorSelect.innerHTML = '<option value="">Selecione a cor</option>';
     dom.colorSelect.disabled = false;
@@ -633,7 +657,6 @@ function renderVariations(variations) {
     return;
   }
 
-  // Único SKU disponível para o produto
   if (variations.length === 1) {
     const singleVar = variations[0];
     const colorLabel = singleVar.color || "Padrão";
@@ -658,7 +681,6 @@ function renderVariations(variations) {
     return;
   }
 
-  // Agrupar variações por cor (cada cor pode ter sua própria galeria de imagens)
   const colorGroups = {};
   variations.forEach((variation) => {
     const color = variation.color || "Padrão";
@@ -690,14 +712,12 @@ function renderVariations(variations) {
 
       const variationsForColor = colorGroups[selectedColor] || [];
 
-      // Trocar a galeria de imagens para a cor selecionada
       const colorImages = variationsForColor.find((v) => v.images && v.images.length > 0)?.images;
       if (colorImages && colorImages.length > 0) {
         renderThumbnails(colorImages);
         if (dom.mainImage) dom.mainImage.src = colorImages[0].imageUrl;
       }
 
-      // Popular tamanhos disponíveis para a cor selecionada
       if (dom.sizeSelect) {
         dom.sizeSelect.innerHTML =
           '<option value="">Selecione o tamanho</option>' +

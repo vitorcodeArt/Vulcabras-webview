@@ -237,20 +237,16 @@ const STORE_CATEGORIES = {
     { id: "4", name: "Esportes", categoryId: "69" },
     { id: "5", name: "Calçados", categoryId: "74" },
   ],
-  // TODO: ajustar os categoryId reais da Olympikus e Under Armour quando disponíveis
   olympikus: [
-    { id: "1", name: "Masculino", categoryId: "1" },
-    { id: "2", name: "Feminino", categoryId: "2" },
-    { id: "3", name: "Kids", categoryId: "3" },
-    { id: "4", name: "Esportes", categoryId: "69" },
-    { id: "5", name: "Calçados", categoryId: "74" },
+    { id: "1", name: "Masculino", categoryId: "2" },
+    { id: "2", name: "Feminino", categoryId: "1" },
+    { id: "3", name: "Infantil", categoryId: "3" },
+    { id: "4", name: "Loja Vulcabras", categoryId: "100" },
   ],
   underarmour: [
-    { id: "1", name: "Masculino", categoryId: "1" },
-    { id: "2", name: "Feminino", categoryId: "2" },
-    { id: "3", name: "Kids", categoryId: "3" },
-    { id: "4", name: "Esportes", categoryId: "69" },
-    { id: "5", name: "Calçados", categoryId: "74" },
+    { id: "1", name: "Masculino", categoryId: "2" },
+    { id: "2", name: "Feminino", categoryId: "3" },
+    { id: "3", name: "Infantil", categoryId: "4" },
   ],
 };
 
