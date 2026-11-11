@@ -1,0 +1,3321 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "MCP - Troquecommerce",
+    "version": "0.8.0",
+    "description": "Header `Authorization: Bearer` em todas as chamadas (ex.: `Authorization: Bearer 99999z99-aaaa-bbbb-cccc-999999999999`). O token de MCP é criado pela Troquecommerce, com a permissão de cada ferramenta: solicite ao time de suporte. O token da API pública não abre o MCP, e o token de MCP não abre a API pública.\n\nO MCP (Model Context Protocol) é o padrão aberto que permite a um assistente de IA usar as ferramentas da Troquecommerce em nome da loja: localizar o pedido, consultar a retenção, cotar a logística reversa, criar a reversa e consultar o status, com as mesmas regras da Central de Trocas e do painel. As ferramentas não são endpoints HTTP: quem chama é o cliente MCP, pelo método `tools/call`, sempre em `POST https://www.troquecommerce.com.br/api/mcp`. O caminho mostrado em cada ferramenta é só o identificador dela.\n\n### Fluxo típico de uma reversa\n\n| # | Ação | Ferramenta |\n|---|---|---|\n| 1 | Localizar pedido | `prepare_reverse_order` |\n| 2 | Cliente escolhe itens, tipo de solicitação e motivo | conversa |\n| 3 | Confirmar endereço | conversa, conforme `address_step` |\n| 4 | Consultar retenção | `get_retention_offer` |\n| 5 | Cotar logística reversa | `quote_return_shipping` |\n| 6 | Criar reversa | `create_reverse_order` |\n| 7 | Consultar status | `track_reverse_order` |\n| 8 | Listar reversas (equipe) | `list_reverse_orders` |\n| 9 | Buscar detalhes (equipe) | `get_reverse_order` |\n\nA ordem dos passos 1 a 6 é fixa. Aceitar a retenção transforma a devolução em troca, e isso muda as opções de logística reversa: por isso a retenção vem antes da cotação. O fluxo termina antes quando a ferramenta disser: pedido que a loja não aceita para no passo 1, e cotação sem opção que o cliente possa escolher segue para o passo 6 sem o bloco `shipping`.\n\n### Etapa de endereço\n\nIgual à etapa de endereço da Central de Trocas. `prepare_reverse_order` diz em `address_step` como conduzir essa etapa com o cliente.\n\n| `mode` | O que fazer |\n|---|---|\n| `confirm` | Leia o endereço do pedido para o cliente e pergunte se o pacote sai dali. Se não, peça o endereço completo. Se sim e `missing_fields` listar campos, peça só esses e envie `address` com o endereço do pedido completado. |\n| `ask_full_address` | A loja pede o endereço inteiro. Peça todos os campos, sem ler o endereço do pedido, e envie em `address`. |\n| `locked` | A loja não permite alterar o endereço. Siga sem `address`. |\n| `skip` | A loja não tem etapa de endereço. Siga sem `address`. |\n\nQuando `missing_customer_fields` listar `document` ou `email`, o pedido veio sem CPF/CNPJ ou sem e-mail: peça ao cliente e envie em `customer` na criação. O endereço combinado vai igual na cotação e na criação. Sem `address` e sem `customer`, a reversa é criada com o endereço e o cadastro do pedido como vieram. A criação só recusa, com `VALIDATION_FAILED`, campo do endereço ou e-mail que o pedido não traz e que não veio na chamada, porque a reversa não pode ser registrada sem eles: `missing_address_fields` e `missing_customer_fields` listam o que falta.\n\n### Exceção e reenvio de e-mail\n\nFora do fluxo de abertura, a equipe da loja pode pedir duas ações ao assistente, com as permissões da Operação interna da loja:\n\n| Ação | Ferramenta |\n|---|---|\n| Liberar um pedido fora do prazo com uma exceção | `create_order_exception` |\n| Reenviar ao cliente o e-mail com as instruções de envio | `resend_shipping_email` |\n\n### Permissões\n\nCada token de MCP carrega uma lista de permissões, e cada permissão abre uma ferramenta. Sem a permissão, a ferramenta responde `FORBIDDEN`. O servidor só lista as ferramentas liberadas pelas permissões do token: as demais não aparecem para o assistente.\n\n| Conjunto | Para quê | Permissões |\n|---|---|---|\n| Cliente só acompanha | O chat só consulta o status de reversas já abertas | `reverse.track` |\n| Cliente abre e acompanha | O chat cria a reversa e depois consulta o status | `reverse.prepare`<br>`retention.read`<br>`shipping.quote`<br>`reverse.create`<br>`reverse.track` |\n| Operador da loja | Para a equipe: cria reversas, consulta todas as reversas da loja, cria exceção e reenvia o e-mail de envio | todas |\n| Consulta interna | Para a equipe só consultar as reversas da loja | `reverse.list`<br>`reverse.read` |\n\n**Canal público só com as ferramentas de Atendimento ao consumidor.** Elas pedem o número do pedido mais o CPF, CNPJ ou e-mail do cliente e só enxergam aquele pedido. `reverse.list` e `reverse.read` leem todas as reversas da loja sem essa conferência, e `exception.create` e `email.resend` agem em nome da loja: são para a equipe, nunca para chat do site ou WhatsApp. Retenção, cotação e criação exigem `reverse.prepare`.\n\n### Como conectar\n\nQualquer cliente que fale MCP por HTTP usa o mesmo endereço e o mesmo header.\n\n**Claude Code**\n\n```bash\nclaude mcp add --transport http troquecommerce https://www.troquecommerce.com.br/api/mcp --header \"Authorization: Bearer SEU-TOKEN\"\n```\n\n**Cursor** (`.cursor/mcp.json`)\n\n```json\n{\n  \"mcpServers\": {\n    \"troquecommerce\": {\n      \"url\": \"https://www.troquecommerce.com.br/api/mcp\",\n      \"headers\": {\n        \"Authorization\": \"Bearer SEU-TOKEN\"\n      }\n    }\n  }\n}\n```\n\n**VS Code com Copilot** (`.vscode/mcp.json`)\n\n```json\n{\n  \"servers\": {\n    \"troquecommerce\": {\n      \"url\": \"https://www.troquecommerce.com.br/api/mcp\",\n      \"requestInit\": {\n        \"headers\": {\n          \"Authorization\": \"Bearer SEU-TOKEN\"\n        }\n      }\n    }\n  }\n}\n```\n\n**claude.ai e o aplicativo de desktop:** em Conectores, adicione um conector personalizado com a URL acima, autenticação `Nenhum` e, em Cabeçalhos de requisição, o nome `Authorization` com o valor `Bearer SEU-TOKEN`. A autenticação por cabeçalho ainda está em beta na Anthropic e pode não aparecer em toda conta. Para trocar o token, remova o conector e crie outro.\n\n**ChatGPT:** o aplicativo ainda não conecta, porque o conector dele só oferece login OAuth ou nenhuma autenticação. Pela API da OpenAI já conecta: a ferramenta de MCP de lá aceita o cabeçalho `authorization`.\n\n### Erros\n\nErro de ferramenta chega com `isError: true` e um JSON com `error_code` e `message` (em inglês, escrita para o assistente). Na criação o JSON traz também `created`. Campo com formato inválido é recusado antes, como erro de validação do protocolo, e token inválido ou ausente responde HTTP `401`.\n\n| Código | O que aconteceu e o que fazer |\n|---|---|\n| `FORBIDDEN` | O token não tem a permissão da ferramenta. Não insista. A permissão é dada no token, pela Troquecommerce. |\n| `ORDER_NOT_FOUND` | Pedido não encontrado, ou o CPF, CNPJ ou e-mail não é do cliente do pedido. Peça para o cliente conferir os dois dados. |\n| `ORDER_NOT_ELIGIBLE` | A loja não aceita reversa para o pedido: prazo expirado, situação não autorizada ou nenhum item disponível. Informe o motivo que veio na mensagem e encerre. |\n| `VALIDATION_FAILED` | Item, quantidade, motivo, foto, comentário, endereço, CPF/CNPJ ou e-mail inválido, ou o pedido não traz um campo do endereço ou o e-mail. A resposta traz o que é válido, e `missing_address_fields` e `missing_customer_fields` listam o que falta. Corrija com o cliente e chame de novo. Em `create_order_exception`, validade no passado ou depois de 2099-12-31, data que não existe ou número vazio. |\n| `ADDRESS_NOT_EDITABLE` | A loja não permite alterar o endereço na Central de Trocas. Siga com o endereço do pedido, sem enviar `address`. |\n| `ALREADY_HAS_ACTIVE_REVERSE` | O pedido já tem reversa ativa e a loja não permite segunda solicitação. Informe o cliente e ofereça a consulta de status. |\n| `DUPLICATE_SUSPECTED` | Já existe reversa deste pedido criada nos últimos 10 minutos. Confira `existing_reverses` antes de tentar de novo. |\n| `RETENTION_NOT_AVAILABLE` | Veio aceite de retenção para um pedido sem retenção disponível. Chame `get_retention_offer` de novo e siga o que ela retornar. |\n| `RETENTION_LEVEL_NOT_AVAILABLE` | Veio um nível de retenção que a loja não oferece. Chame `get_retention_offer` de novo e use um nível da lista. |\n| `RETENTION_OFFER_CHANGED` | O cliente aceitou retenção com bônus e escolheu uma entrega em loja física que a loja fecha em vale-compras sem bônus. Chame `get_retention_offer` com o `shipping_company_id` escolhido e confirme de novo com o cliente. |\n| `TEMPORARY_FAILURE` | Falha temporária ao ler a loja ou a plataforma de e-commerce, ou ao gravar a exceção. Tente de novo em alguns segundos. |\n| `CREATION_UNCONFIRMED` | Não foi possível confirmar se a reversa foi criada. Não repita a criação. Confira antes com `prepare_reverse_order`. **Pode ter sido criada.** |\n| `CREATED_WITH_ERRORS` | A reversa foi criada, mas um passo seguinte falhou. Informe ao cliente que a solicitação foi registrada. A loja resolve pelo painel. **A reversa foi criada.** |\n| `EXCEPTION_ALREADY_EXISTS` | O pedido já tem exceção na tela Exceções do painel, mesmo vencida. Nada foi criado: a loja remove a antiga no painel antes de criar outra. |\n| `REVERSE_ORDER_NOT_FOUND` | Nenhuma reversa da loja tem esse ID. Nada foi enviado. |\n| `NOT_AWAITING_SHIPMENT` | A reversa não está em Aguardando Envio nem em Aguardando Recebimento, então não há instruções de envio para reenviar. Nada foi enviado. |\n| `NO_SHIPPING_EMAIL` | A reversa nunca recebeu o e-mail com as instruções de envio. Nada foi enviado. |\n| `EMAIL_NOT_SENT` | O reenvio falhou. Tente de novo mais tarde. |\n\n### Rate limit\n\n**70 requisições a cada 10 segundos**, contadas **por IP** (não por token e não por ferramenta). Todos os tokens que saem do mesmo IP compartilham o mesmo contador. Ao estourar o limite a resposta é `429 Too Many Requests`. Para um limite maior, fale com o suporte da Troquecommerce.\n\n### Convenções\n\n| Campo | Formato |\n|---|---|\n| Datas | ISO 8601, salvo onde o campo disser outro formato |\n| IDs | UUID v4 |\n| Valores monetários | `number` decimal, na moeda do pedido |\n| Documentos e CEP | Só dígitos |\n| Status e motivos | Em português, com o texto que a loja configurou |"
+  },
+  "servers": [
+    {
+      "url": "https://www.troquecommerce.com.br/api/mcp"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Atendimento ao consumidor",
+      "description": "Ferramentas para o chat com o cliente. Cada chamada exige o número do pedido mais o CPF, CNPJ ou e-mail do cliente, e só enxerga aquele pedido."
+    },
+    {
+      "name": "Operação interna da loja",
+      "description": "Ferramentas para a equipe da loja. Leem todas as reversas da loja, com os dados do cliente seguindo a regra de visibilidade do painel, e agem em nome da loja. Não use em chat aberto ao público."
+    }
+  ],
+  "paths": {
+    "/tools/call/prepare_reverse_order": {
+      "post": {
+        "operationId": "prepare_reverse_order",
+        "summary": "Localiza o pedido e os itens disponíveis para reversa",
+        "description": "**Ferramenta:** `prepare_reverse_order` · **Permissão:** `reverse.prepare`\n\nÉ a primeira chamada do fluxo, equivalente a **Localizar Pedido** na Central de Trocas. Retorna se a loja aceita abrir reversa para o pedido agora, os itens disponíveis, os motivos que o cliente pode escolher, as reversas já abertas e como fazer a etapa de endereço.\n\nLê o pedido ao vivo na plataforma de e-commerce e atualiza a cópia interna dele. Não cria reversa e não envia e-mail.\n\n- Quando `eligible` é false, use `ineligibility_message`: é o mesmo texto que o cliente leria na Central de Trocas.\n- O texto de `reasons[].reason` é a chave do motivo. As outras ferramentas exigem esse texto exato.\n- Os prazos já vêm aplicados: motivo listado é motivo que o cliente ainda pode usar. Não recalcule prazo.\n- `address_step` diz como fazer a etapa de endereço, igual à Central de Trocas: confirmar o endereço do pedido, pedir só o que falta ou pedir o endereço inteiro, além do CPF/CNPJ ou e-mail que o pedido não trouxe. Veja **Etapa de endereço** na introdução.",
+        "tags": [
+          "Atendimento ao consumidor"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"prepare_reverse_order\",\n    \"arguments\": {\n      \"ecommerce_number\": \"10234\",\n      \"customer_identifier\": \"maria.souza@exemplo.com\"\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce da loja, como o cliente vê na confirmação da compra. O `#` e os espaços são ignorados."
+                  },
+                  "customer_identifier": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "CPF (11 dígitos), CNPJ (14 dígitos) ou e-mail do cliente do pedido, sem pontuação. É conferido com o cliente gravado no pedido: se não bater, a resposta é a mesma de pedido inexistente."
+                  }
+                },
+                "required": [
+                  "ecommerce_number",
+                  "customer_identifier"
+                ]
+              },
+              "example": {
+                "ecommerce_number": "10234",
+                "customer_identifier": "maria.souza@exemplo.com"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "eligible": {
+                      "type": "boolean",
+                      "description": "True quando a loja aceita abrir reversa para este pedido agora."
+                    },
+                    "ineligibility_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Chave técnica da recusa, como `expiredExchangeReturnDeadlines`, `orderUnauthorizedSituation`, `noItemsAvailable` ou `alreadyHaveActiveExchangeRequest`. Null quando `eligible` é true."
+                    },
+                    "ineligibility_message": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Motivo da recusa em português, com o mesmo texto da Central de Trocas. Null quando `eligible` é true."
+                    },
+                    "order": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Dados do pedido. Null quando uma regra da loja barrou a consulta antes de ler o pedido (ex.: pedido de loja física).",
+                      "properties": {
+                        "ecommerce_number": {
+                          "type": "string",
+                          "description": "Número do pedido original na plataforma de e-commerce da loja."
+                        },
+                        "status": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Status do pedido de venda na plataforma de e-commerce, com o texto da plataforma. Não é status de reversa."
+                        },
+                        "created_at": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Data e hora de criação do pedido na plataforma (ISO 8601)."
+                        },
+                        "updated_at": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Data e hora da última atualização do pedido (ISO 8601)."
+                        },
+                        "delivered_at": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Data e hora da entrega do pedido (ISO 8601). Null quando a plataforma não informou entrega."
+                        },
+                        "price": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Valor do pedido, como a plataforma informou no campo de preço."
+                        },
+                        "total_price": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Valor total do pedido, como a plataforma informou."
+                        },
+                        "is_bank_transfer": {
+                          "type": "boolean",
+                          "description": "True quando o reembolso deste pedido precisa de dados bancários ou chave PIX. Se for true e houver item em devolução, colete `payment_bill` antes de criar a reversa."
+                        },
+                        "second_request": {
+                          "type": "boolean",
+                          "description": "True quando o pedido já tem reversa ativa e a loja permite uma segunda solicitação."
+                        },
+                        "second_reverse": {
+                          "type": "boolean",
+                          "description": "True quando este pedido é o pedido de troca gerado por uma reversa anterior."
+                        },
+                        "number_of_defect_images": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Quantidade de fotos que a loja pede nos motivos que exigem foto. É orientação: a criação só limita a 10 fotos por item."
+                        },
+                        "customer": {
+                          "type": "object",
+                          "description": "Cliente do pedido, com os dados de contato mascarados como na Central de Trocas.",
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Nome do cliente."
+                            },
+                            "email_masked": {
+                              "type": "string",
+                              "description": "E-mail mascarado, como `mar****@exemplo.com`."
+                            },
+                            "phone_masked": {
+                              "type": "string",
+                              "description": "Telefone mascarado."
+                            },
+                            "document_masked": {
+                              "type": "string",
+                              "description": "Documento (CPF ou CNPJ) mascarado, como `074*****900`."
+                            }
+                          },
+                          "required": [
+                            "name",
+                            "email_masked",
+                            "phone_masked",
+                            "document_masked"
+                          ]
+                        },
+                        "address": {
+                          "type": "object",
+                          "description": "Endereço do pedido. É o endereço usado na logística reversa quando nenhum outro é informado.",
+                          "properties": {
+                            "street": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Logradouro."
+                            },
+                            "number": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Número."
+                            },
+                            "description": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Complemento."
+                            },
+                            "zipcode": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "CEP (somente dígitos)."
+                            },
+                            "neighborhood": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Bairro."
+                            },
+                            "city": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Cidade."
+                            },
+                            "state": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Sigla do estado (UF)."
+                            },
+                            "country": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "País."
+                            }
+                          },
+                          "required": [
+                            "street",
+                            "number",
+                            "description",
+                            "zipcode",
+                            "neighborhood",
+                            "city",
+                            "state",
+                            "country"
+                          ]
+                        },
+                        "items": {
+                          "type": "array",
+                          "description": "Itens disponíveis para troca ou devolução.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sku": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "SKU do item."
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Descrição do produto (nome + variações)."
+                              },
+                              "quantity": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Quantidade disponível do item, já descontadas as reversas abertas listadas em `existing_reverses`."
+                              },
+                              "price": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Preço unitário do item."
+                              },
+                              "image": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "URL da imagem do produto."
+                              },
+                              "seller": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Seller do item (em marketplaces multi-seller). Null nas demais lojas."
+                              }
+                            },
+                            "required": [
+                              "sku",
+                              "description",
+                              "quantity",
+                              "price",
+                              "image",
+                              "seller"
+                            ]
+                          }
+                        },
+                        "unavailable_items": {
+                          "type": "array",
+                          "description": "Itens do pedido que a loja não aceita em reversa. Vazio quando todos podem voltar.",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "sku": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "SKU do item."
+                              },
+                              "description": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Descrição do produto."
+                              },
+                              "quantity": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Quantidade do item no pedido."
+                              }
+                            },
+                            "required": [
+                              "sku",
+                              "description",
+                              "quantity"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "ecommerce_number",
+                        "status",
+                        "created_at",
+                        "updated_at",
+                        "delivered_at",
+                        "price",
+                        "total_price",
+                        "is_bank_transfer",
+                        "second_request",
+                        "second_reverse",
+                        "number_of_defect_images",
+                        "customer",
+                        "address",
+                        "items",
+                        "unavailable_items"
+                      ]
+                    },
+                    "reasons": {
+                      "type": "array",
+                      "description": "Motivos que a loja aceita para este pedido agora. Motivos ocultos para o cliente não aparecem. Vazio quando `eligible` é false.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "reason": {
+                            "type": "string",
+                            "description": "Texto do motivo, como a loja configurou. É o valor que vai em `reason.description`."
+                          },
+                          "is_exchange": {
+                            "type": "boolean",
+                            "description": "True quando o motivo aceita troca."
+                          },
+                          "is_refund": {
+                            "type": "boolean",
+                            "description": "True quando o motivo aceita devolução."
+                          },
+                          "has_image": {
+                            "type": "boolean",
+                            "description": "True quando o motivo exige foto. A criação recusa o item sem `reason.image_url`."
+                          },
+                          "has_comment": {
+                            "type": "boolean",
+                            "description": "True quando o motivo exige comentário do cliente."
+                          },
+                          "image_text": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Instrução que a loja escreveu para as fotos deste motivo. Null quando a loja deixou em branco."
+                          },
+                          "sub_reasons": {
+                            "type": "array",
+                            "description": "Submotivos configurados pela loja. O texto é o valor que vai em `reason.sub_reason`.",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "reason",
+                          "is_exchange",
+                          "is_refund",
+                          "has_image",
+                          "has_comment",
+                          "image_text",
+                          "sub_reasons"
+                        ]
+                      }
+                    },
+                    "existing_reverses": {
+                      "type": "array",
+                      "description": "Reversas já abertas para o pedido. Reversas canceladas e de presente não aparecem, e as de ruptura ficam ocultas na maioria das lojas.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "ID único da reversa na Troquecommerce (UUID v4)."
+                          },
+                          "ecommerce_number": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Número do pedido da reversa. Em marketplace pode ser um subpedido irmão do número consultado."
+                          },
+                          "status_id": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "ID numérico do status da reversa."
+                          },
+                          "status_name": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Status da reversa em português, com o texto que a loja mostra ao cliente."
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Data e hora de criação da reversa (ISO 8601)."
+                          },
+                          "items": {
+                            "type": "array",
+                            "description": "Itens incluídos na reversa.",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "sku": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "SKU do item."
+                                },
+                                "quantity": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Quantidade em reversa."
+                                },
+                                "is_removed": {
+                                  "type": "boolean",
+                                  "description": "True se o item foi removido da reversa após análise."
+                                },
+                                "received": {
+                                  "type": "boolean",
+                                  "description": "True após o recebimento físico do item ser confirmado pela loja."
+                                }
+                              },
+                              "required": [
+                                "sku",
+                                "quantity",
+                                "is_removed",
+                                "received"
+                              ]
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ecommerce_number",
+                          "status_id",
+                          "status_name",
+                          "created_at",
+                          "items"
+                        ]
+                      }
+                    },
+                    "address_step": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Como fazer a etapa de endereço com o cliente, igual à Central de Trocas desta loja. Vem depois da escolha de itens e motivos e antes da retenção. Null quando `eligible` é false ou o pedido não foi lido.",
+                      "required": [
+                        "mode",
+                        "missing_fields",
+                        "missing_customer_fields"
+                      ],
+                      "properties": {
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "confirm",
+                            "ask_full_address",
+                            "locked",
+                            "skip"
+                          ],
+                          "description": "Como a Central de Trocas desta loja faz a etapa. `confirm`: confirmar o endereço do pedido com o cliente. `ask_full_address`: pedir o endereço inteiro. `locked`: endereço não pode ser alterado. `skip`: a loja não tem essa etapa."
+                        },
+                        "missing_fields": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "street",
+                              "city",
+                              "state",
+                              "zipcode",
+                              "number",
+                              "neighborhood"
+                            ]
+                          },
+                          "description": "Campos do endereço do pedido que a Central de Trocas recusaria (vazio, curto demais, CEP sem 8 dígitos ou número sem nenhum dígito), na ordem em que ela confere. Cada nome é o campo de `address` a preencher. Só vem preenchido no modo `confirm`. Peça esses campos ao cliente e envie `address` com o endereço do pedido completado. Sem `address`, a criação usa o endereço do pedido como veio e só recusa campo que o pedido não traz."
+                        },
+                        "missing_customer_fields": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "email"
+                            ]
+                          },
+                          "description": "Dados que o pedido não trouxe e que a Central de Trocas pede na mesma etapa: `document` (CPF ou CNPJ) e `email`. Vazio quando o pedido tem os dois e sempre vazio no modo `skip`. Vão em `customer` na criação. Sem eles, a reversa é criada com o campo em branco, menos o e-mail que o pedido não traz, que a criação recusa."
+                        }
+                      }
+                    }
+                  },
+                  "required": [
+                    "eligible",
+                    "ineligibility_code",
+                    "ineligibility_message",
+                    "order",
+                    "reasons",
+                    "existing_reverses",
+                    "address_step"
+                  ]
+                },
+                "example": {
+                  "eligible": true,
+                  "ineligibility_code": null,
+                  "ineligibility_message": null,
+                  "order": {
+                    "ecommerce_number": "10234",
+                    "status": "Entregue",
+                    "created_at": "2026-09-01T13:20:11+00:00",
+                    "updated_at": "2026-09-08T09:02:40+00:00",
+                    "delivered_at": "2026-09-08T09:02:40+00:00",
+                    "price": 89.9,
+                    "total_price": 104.8,
+                    "is_bank_transfer": true,
+                    "second_request": false,
+                    "second_reverse": false,
+                    "number_of_defect_images": 1,
+                    "customer": {
+                      "name": "Maria Eduarda Silva",
+                      "email_masked": "mar*********@exemplo.com",
+                      "phone_masked": "119*****999",
+                      "document_masked": "123*****909"
+                    },
+                    "address": {
+                      "street": "Rua das Flores",
+                      "number": "120",
+                      "description": "Apto 42",
+                      "zipcode": "01310100",
+                      "neighborhood": "Bela Vista",
+                      "city": "São Paulo",
+                      "state": "SP",
+                      "country": "Brasil"
+                    },
+                    "items": [
+                      {
+                        "sku": "CAM-AZUL-M",
+                        "description": "Camiseta Azul - M",
+                        "quantity": 1,
+                        "price": 89.9,
+                        "image": "https://loja.exemplo.com/img/cam-azul.jpg",
+                        "seller": null
+                      }
+                    ],
+                    "unavailable_items": []
+                  },
+                  "reasons": [
+                    {
+                      "reason": "Não serviu",
+                      "is_exchange": true,
+                      "is_refund": true,
+                      "has_image": false,
+                      "has_comment": false,
+                      "image_text": null,
+                      "sub_reasons": [
+                        "Ficou grande",
+                        "Ficou pequeno"
+                      ]
+                    },
+                    {
+                      "reason": "Produto com defeito",
+                      "is_exchange": true,
+                      "is_refund": true,
+                      "has_image": true,
+                      "has_comment": true,
+                      "image_text": "Envie uma foto do defeito",
+                      "sub_reasons": []
+                    }
+                  ],
+                  "existing_reverses": [],
+                  "address_step": {
+                    "mode": "confirm",
+                    "missing_fields": [],
+                    "missing_customer_fields": []
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "ORDER_NOT_FOUND",
+                        "TEMPORARY_FAILURE"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "ORDER_NOT_FOUND",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/get_retention_offer": {
+      "post": {
+        "operationId": "get_retention_offer",
+        "summary": "Consulta a retenção da loja para os itens em devolução",
+        "description": "**Ferramenta:** `get_retention_offer` · **Permissão:** `retention.read`\n\nVerifica se a loja tem **retenção ativa** para este pedido e qual oferta vale para os itens em devolução: o vale-compras com bônus que o cliente pode receber no lugar do reembolso. Usa as mesmas regras da Central de Trocas: retenção configurada e ativa, ao menos um item em devolução, cliente elegível e limite de retenções da loja.\n\nChame depois de o cliente escolher itens e motivos, e **antes** de `quote_return_shipping`: aceitar a retenção transforma os itens em troca, e isso muda as opções de logística reversa.\n\n- `mode` `offer`: apresente a oferta uma vez e registre a resposta. `automatic` e `forced`: a loja já fecha a devolução em vale-compras, só informe. `none`: não toque no assunto.\n- A oferta de `level` 2 é a 2ª tentativa de retenção: só existe quando vem na lista, e só depois de o cliente recusar a 1ª.\n- A decisão do cliente segue em `retention_accepted` na cotação e em `retention` na criação.",
+        "tags": [
+          "Atendimento ao consumidor"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_retention_offer\",\n    \"arguments\": {\n      \"ecommerce_number\": \"10234\",\n      \"customer_identifier\": \"maria.souza@exemplo.com\",\n      \"items\": [\n        {\n          \"sku\": \"CAM-AZUL-M\",\n          \"quantity\": 1,\n          \"is_exchange\": false,\n          \"reason_description\": \"Não serviu\"\n        }\n      ]\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce da loja, como o cliente vê na confirmação da compra. O `#` e os espaços são ignorados."
+                  },
+                  "customer_identifier": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "CPF (11 dígitos), CNPJ (14 dígitos) ou e-mail do cliente do pedido, sem pontuação. É conferido com o cliente gravado no pedido: se não bater, a resposta é a mesma de pedido inexistente."
+                  },
+                  "items": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "description": "Itens da reversa, até 50. Cada linha é um SKU do pedido.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sku": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "SKU do item, como veio em `order.items[].sku`."
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Quantidade do item em reversa. Não pode passar da quantidade disponível em `order.items[].quantity`."
+                        },
+                        "is_exchange": {
+                          "type": "boolean",
+                          "description": "Tipo de solicitação do item: true para troca, false para devolução (reembolso)."
+                        },
+                        "reason_description": {
+                          "type": "string",
+                          "maxLength": 300,
+                          "description": "Texto exato do motivo, como veio em `reasons[].reason`."
+                        }
+                      },
+                      "required": [
+                        "sku",
+                        "quantity",
+                        "is_exchange",
+                        "reason_description"
+                      ]
+                    }
+                  },
+                  "shipping_company_id": {
+                    "type": "number",
+                    "enum": [
+                      2,
+                      5,
+                      6,
+                      9,
+                      10,
+                      12,
+                      13,
+                      14,
+                      15,
+                      16
+                    ],
+                    "description": "ID da transportadora que o cliente já escolheu, copiado da cotação. Omita no fluxo normal. Só é necessário nas lojas em que a entrega em loja física já fecha a devolução em vale-compras."
+                  }
+                },
+                "required": [
+                  "ecommerce_number",
+                  "customer_identifier",
+                  "items"
+                ]
+              },
+              "example": {
+                "ecommerce_number": "10234",
+                "customer_identifier": "maria.souza@exemplo.com",
+                "items": [
+                  {
+                    "sku": "CAM-AZUL-M",
+                    "quantity": 1,
+                    "is_exchange": false,
+                    "reason_description": "Não serviu"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "available": {
+                      "type": "boolean",
+                      "description": "True quando a loja tem retenção ativa e há oferta para este pedido. False: siga com o reembolso e não cite vale-compras nem bônus."
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "automatic",
+                        "offer",
+                        "forced",
+                        "none"
+                      ],
+                      "description": "Como a loja trata a devolução. `offer`: o cliente escolhe entre o reembolso e o vale-compras. `automatic`: Retenção Nível 3, toda devolução do pedido vira vale-compras. `forced`: o mesmo, aplicado à entrega em loja física que o cliente escolheu. `none`: sem retenção."
+                    },
+                    "blocked_reason": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Por que não há oferta: `not_configured`, `not_active`, `no_return_item`, `customer_not_eligible` ou `store_rule`. É registro para a loja, nunca assunto da conversa. Null quando `available` é true."
+                    },
+                    "offers": {
+                      "type": "array",
+                      "nullable": true,
+                      "description": "Ofertas de retenção. Null quando `available` é false.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "level": {
+                            "type": "number",
+                            "description": "Nível da retenção, como no painel: 1 (1ª tentativa de retenção), 2 (2ª tentativa, só depois de o cliente recusar a 1ª), 3 (Retenção Nível 3, automática) ou 0 (retenção sem bônus da entrega em loja física)."
+                          },
+                          "bonus_type": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Tipo do benefício ofertado: `fixed` (valor fixo), `percentage` (percentual sobre o valor retido) ou `no_bonus`."
+                          },
+                          "bonus_config_value": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Valor do bônus configurado pela loja para o nível: um valor em reais quando `fixed`, um percentual quando `percentage`. Null quando não há."
+                          },
+                          "bonus_value": {
+                            "type": "number",
+                            "description": "Bônus de retenção para estes itens, em reais. Zero quando a loja não dá bônus."
+                          },
+                          "retained_value": {
+                            "type": "number",
+                            "description": "Valor retido: preço pago dos itens (preço menos desconto) vezes a quantidade em devolução."
+                          },
+                          "credit_value": {
+                            "type": "number",
+                            "description": "Valor do vale-compras que o cliente recebe: `retained_value` mais `bonus_value`. É o número a informar ao cliente."
+                          }
+                        },
+                        "required": [
+                          "level",
+                          "bonus_type",
+                          "bonus_config_value",
+                          "bonus_value",
+                          "retained_value",
+                          "credit_value"
+                        ]
+                      }
+                    },
+                    "cancel_days": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Prazo para solicitar reembolso, em dias, contado da emissão do vale-compras. Só existe no `mode` `automatic`. Null quando a loja não configurou prazo."
+                    }
+                  },
+                  "required": [
+                    "available",
+                    "mode",
+                    "blocked_reason",
+                    "offers",
+                    "cancel_days"
+                  ]
+                },
+                "example": {
+                  "available": true,
+                  "mode": "offer",
+                  "blocked_reason": null,
+                  "offers": [
+                    {
+                      "level": 1,
+                      "bonus_type": "percentage",
+                      "bonus_config_value": 10,
+                      "bonus_value": 8.99,
+                      "retained_value": 89.9,
+                      "credit_value": 98.89
+                    }
+                  ],
+                  "cancel_days": null
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "ORDER_NOT_FOUND",
+                        "ORDER_NOT_ELIGIBLE",
+                        "VALIDATION_FAILED",
+                        "TEMPORARY_FAILURE"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "ORDER_NOT_FOUND",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/quote_return_shipping": {
+      "post": {
+        "operationId": "quote_return_shipping",
+        "summary": "Cota a logística reversa para os itens selecionados",
+        "description": "**Ferramenta:** `quote_return_shipping` · **Permissão:** `shipping.quote`\n\nRetorna as opções de logística reversa que a loja oferece para os itens e motivos escolhidos: postagem, coleta ou entrega em ponto de devolução. A cotação depende da escolha do cliente, porque a coleta e as regras por motivo variam conforme os itens.\n\nÉ a chamada mais cara do fluxo: lê o pedido ao vivo e cota, uma a uma, as transportadoras ativas da loja, sem cache. Chame só depois da retenção, quando o cliente já decidiu o que volta e por quê.\n\n- Ofereça ao cliente só as opções com `can_be_chosen` true.\n- Lista vazia é resposta válida: siga para a criação sem o bloco `shipping`, e a loja contrata a logística pelo painel.\n- Aqui o motivo vai em `reason.description`. Em `get_retention_offer` ele vai em `reason_description`.",
+        "tags": [
+          "Atendimento ao consumidor"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"quote_return_shipping\",\n    \"arguments\": {\n      \"ecommerce_number\": \"10234\",\n      \"customer_identifier\": \"maria.souza@exemplo.com\",\n      \"items\": [\n        {\n          \"sku\": \"CAM-AZUL-M\",\n          \"quantity\": 1,\n          \"is_exchange\": false,\n          \"reason\": {\n            \"description\": \"Não serviu\"\n          }\n        }\n      ],\n      \"retention_accepted\": false\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce da loja, como o cliente vê na confirmação da compra. O `#` e os espaços são ignorados."
+                  },
+                  "customer_identifier": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "CPF (11 dígitos), CNPJ (14 dígitos) ou e-mail do cliente do pedido, sem pontuação. É conferido com o cliente gravado no pedido: se não bater, a resposta é a mesma de pedido inexistente."
+                  },
+                  "items": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "description": "Itens da reversa, até 50. Cada linha é um SKU do pedido.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sku": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "SKU do item, como veio em `order.items[].sku`."
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Quantidade do item em reversa. Não pode passar da quantidade disponível em `order.items[].quantity`."
+                        },
+                        "is_exchange": {
+                          "type": "boolean",
+                          "description": "Tipo de solicitação do item: true para troca, false para devolução (reembolso)."
+                        },
+                        "reason": {
+                          "type": "object",
+                          "description": "Motivo do item.",
+                          "properties": {
+                            "description": {
+                              "type": "string",
+                              "maxLength": 300,
+                              "description": "Texto exato do motivo, como veio em `reasons[].reason`."
+                            }
+                          },
+                          "required": [
+                            "description"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "sku",
+                        "quantity",
+                        "is_exchange",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "retention_accepted": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "True quando o cliente aceitou a retenção em `get_retention_offer`. Com true a cotação trata os itens como troca, como a Central de Trocas faz depois do aceite."
+                  },
+                  "address": {
+                    "type": "object",
+                    "description": "Endereço de onde o pacote sai, combinado na etapa de endereço (`address_step`). Envie quando o cliente informou outro endereço, quando `missing_fields` listou campos (o endereço do pedido completado com o que o cliente informou) ou quando o modo é `ask_full_address`. Sem ele, a cotação usa o endereço do pedido. Todos os campos vêm juntos.",
+                    "properties": {
+                      "zipcode": {
+                        "type": "string",
+                        "maxLength": 20,
+                        "description": "CEP (somente dígitos)."
+                      },
+                      "street": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Logradouro."
+                      },
+                      "number": {
+                        "type": "string",
+                        "maxLength": 30,
+                        "description": "Número."
+                      },
+                      "neighborhood": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Bairro."
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Cidade."
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "Sigla do estado (UF)."
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Complemento."
+                      }
+                    },
+                    "required": [
+                      "zipcode",
+                      "street",
+                      "number",
+                      "neighborhood",
+                      "city",
+                      "state"
+                    ]
+                  }
+                },
+                "required": [
+                  "ecommerce_number",
+                  "customer_identifier",
+                  "items"
+                ]
+              },
+              "example": {
+                "ecommerce_number": "10234",
+                "customer_identifier": "maria.souza@exemplo.com",
+                "items": [
+                  {
+                    "sku": "CAM-AZUL-M",
+                    "quantity": 1,
+                    "is_exchange": false,
+                    "reason": {
+                      "description": "Não serviu"
+                    }
+                  }
+                ],
+                "retention_accepted": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "shipping_options": {
+                      "type": "array",
+                      "description": "Opções de logística reversa da loja para esta reversa.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "shipping_company_id": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "ID da transportadora. Vai em `shipping.shipping_company_id` na criação."
+                          },
+                          "can_be_chosen": {
+                            "type": "boolean",
+                            "description": "True quando a criação consegue contratar esta opção. False não significa indisponível: é opção que a loja oferece, mas que só pode ser contratada pela Central de Trocas (ex.: coleta paga)."
+                          },
+                          "shipping_company_name": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Nome da transportadora."
+                          },
+                          "is_collect": {
+                            "type": "boolean",
+                            "description": "True quando o frete reverso é coleta (a transportadora retira no cliente); false quando o cliente faz a postagem. Vai junto com o ID na criação."
+                          },
+                          "is_paid_collect": {
+                            "type": "boolean",
+                            "description": "True quando é coleta com taxa paga pelo cliente. Vem sempre com `can_be_chosen` false."
+                          },
+                          "fee_amount": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Taxa de coleta cobrada do cliente, em centavos (2490 = R$ 24,90). Null nas demais opções."
+                          },
+                          "delivery_address_id": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "ID do ponto de devolução da loja (UUID) quando a opção é entrega em loja física. Vai em `shipping.organisation_address_id` na criação."
+                          },
+                          "posting_address": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Endereço de postagem sugerido. Null quando a opção não tem ponto fixo."
+                          },
+                          "posting_address_name": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Nome do ponto de postagem ou de devolução."
+                          },
+                          "posting_address_opening_hours": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Horário de funcionamento do ponto."
+                          }
+                        },
+                        "required": [
+                          "shipping_company_id",
+                          "can_be_chosen",
+                          "shipping_company_name",
+                          "is_collect",
+                          "is_paid_collect",
+                          "fee_amount",
+                          "delivery_address_id",
+                          "posting_address",
+                          "posting_address_name",
+                          "posting_address_opening_hours"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "shipping_options"
+                  ]
+                },
+                "example": {
+                  "shipping_options": [
+                    {
+                      "shipping_company_id": 2,
+                      "can_be_chosen": true,
+                      "shipping_company_name": "Correios",
+                      "is_collect": false,
+                      "is_paid_collect": false,
+                      "fee_amount": null,
+                      "delivery_address_id": null,
+                      "posting_address": null,
+                      "posting_address_name": null,
+                      "posting_address_opening_hours": null
+                    },
+                    {
+                      "shipping_company_id": 6,
+                      "can_be_chosen": true,
+                      "shipping_company_name": "Loja física",
+                      "is_collect": false,
+                      "is_paid_collect": false,
+                      "fee_amount": null,
+                      "delivery_address_id": "6f1c2d3e-4a5b-4c6d-8e7f-0a1b2c3d4e5f",
+                      "posting_address": "Av. Paulista, 1000 - Bela Vista, São Paulo - SP",
+                      "posting_address_name": "Loja Paulista",
+                      "posting_address_opening_hours": "Seg a sáb, 10h às 22h"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "ORDER_NOT_FOUND",
+                        "ORDER_NOT_ELIGIBLE",
+                        "VALIDATION_FAILED",
+                        "ADDRESS_NOT_EDITABLE",
+                        "TEMPORARY_FAILURE"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "ORDER_NOT_FOUND",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/create_reverse_order": {
+      "post": {
+        "operationId": "create_reverse_order",
+        "summary": "Cria uma nova reversa para o pedido",
+        "description": "**Ferramenta:** `create_reverse_order` · **Permissão:** `reverse.create`\n\nCria a reversa pelo mesmo caminho do `POST /order/create` da API: aplica a **aprovação automática** da loja, contrata a logística reversa quando aprova e envia o e-mail ao cliente na mesma chamada. Não tem modo de teste e não dá para desfazer por aqui.\n\nChame só depois de o cliente aprovar um resumo do que volta, por quê e como chega à loja. `confirm` tem que ser true.\n\n- `shipping` leva o `shipping_company_id` e o `is_collect` da opção escolhida na cotação. Opção com `can_be_chosen` false nunca entra: para ela, omita o bloco.\n- Omitir `shipping` não contrata Correios: a loja usa a transportadora padrão dela. Para Correios, envie o ID 2 com o `is_collect` da opção escolhida.\n- Resposta incerta (`CREATION_UNCONFIRMED` ou tempo esgotado): confira `existing_reverses` em `prepare_reverse_order` antes de tentar de novo.\n- O endereço e os dados do cliente seguem `address_step` de `prepare_reverse_order`. A criação só recusa (`VALIDATION_FAILED`, nada criado) campo do endereço ou e-mail que o pedido não traz e que não veio na chamada.\n- A requisição recebida fica registrada no **histórico** da reversa criada, com os parâmetros enviados e o token que os enviou.\n\n\n| `outcome` | O que aconteceu |\n|---|---|\n| `approved_with_shipping` | Aprovação automática, com a logística reversa contratada. |\n| `approved_without_shipping` | Aprovação automática com opção que não contrata transportadora (entrega em loja física ou envio pelo cliente). |\n| `pending_analysis` | Reversa criada com status Em Análise. Nenhuma logística foi contratada. |\n| `approved_shipping_failed` | Aprovação automática, mas a contratação da logística falhou. A loja resolve pelo painel. |\n\n\n| `shipping_company_id` | Transportadora | O que contrata |\n|---|---|---|\n| 2 | Correios | Postagem na agência ou coleta domiciliar, conforme o `is_collect` |\n| 5 | Motoboy | Coleta no endereço da reversa |\n| 6 | Loja física | Entrega no ponto de devolução. Exige `organisation_address_id` |\n| 9 | Envio pelo cliente | Sem transportadora contratada e sem rastreio |\n| 10 | Devoluxe | Coleta no endereço da reversa |\n| 12 | USPS | Postagem pelo cliente |\n| 13 | Loggi | Postagem pelo cliente |\n| 14 | Recoli | Coleta no endereço da reversa |\n| 15 | Jadlog | Postagem pelo cliente |\n| 16 | Ícaro | Aceito, mas não contrata por aqui: a coleta exige a chave da NFD, então a reversa fica Em Análise |",
+        "tags": [
+          "Atendimento ao consumidor"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_reverse_order\",\n    \"arguments\": {\n      \"confirm\": true,\n      \"ecommerce_number\": \"10234\",\n      \"customer_identifier\": \"maria.souza@exemplo.com\",\n      \"items\": [\n        {\n          \"sku\": \"CAM-AZUL-M\",\n          \"quantity\": 1,\n          \"is_exchange\": false,\n          \"reason\": {\n            \"description\": \"Não serviu\",\n            \"sub_reason\": \"Ficou pequeno\"\n          }\n        }\n      ],\n      \"shipping\": {\n        \"shipping_company_id\": 2,\n        \"is_collect\": false\n      },\n      \"retention\": {\n        \"accepted\": false\n      },\n      \"payment_bill\": {\n        \"is_pix\": true,\n        \"pix_type\": \"E-mail\",\n        \"pix_key\": \"maria.souza@exemplo.com\"\n      }\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ],
+                    "description": "Tem que ser true. Envie só depois de o cliente aprovar o resumo da reversa."
+                  },
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce da loja, como o cliente vê na confirmação da compra. O `#` e os espaços são ignorados."
+                  },
+                  "customer_identifier": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "CPF (11 dígitos), CNPJ (14 dígitos) ou e-mail do cliente do pedido, sem pontuação. É conferido com o cliente gravado no pedido: se não bater, a resposta é a mesma de pedido inexistente."
+                  },
+                  "items": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "description": "Itens da reversa, até 50. Cada linha é um SKU do pedido.",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "sku": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "SKU do item, como veio em `order.items[].sku`."
+                        },
+                        "quantity": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "description": "Quantidade do item em reversa. Não pode passar da quantidade disponível em `order.items[].quantity`."
+                        },
+                        "is_exchange": {
+                          "type": "boolean",
+                          "description": "Tipo de solicitação do item: true para troca, false para devolução (reembolso)."
+                        },
+                        "reason": {
+                          "type": "object",
+                          "description": "Motivo da troca/devolução informado pelo cliente.",
+                          "properties": {
+                            "description": {
+                              "type": "string",
+                              "maxLength": 300,
+                              "description": "Texto exato do motivo, como veio em `reasons[].reason`."
+                            },
+                            "sub_reason": {
+                              "type": "string",
+                              "maxLength": 300,
+                              "description": "Submotivo, copiado de `reasons[].sub_reasons`. É gravado como veio, sem conferência."
+                            },
+                            "client_comment": {
+                              "type": "string",
+                              "maxLength": 1000,
+                              "description": "Comentário do cliente. Obrigatório quando o motivo tem `has_comment` true."
+                            },
+                            "image_url": {
+                              "type": "array",
+                              "maxItems": 10,
+                              "description": "URLs públicas das fotos do item, até 10. Obrigatório quando o motivo tem `has_image` true. Anexo de chat precisa ser hospedado antes.",
+                              "items": {
+                                "type": "string",
+                                "format": "uri"
+                              }
+                            }
+                          },
+                          "required": [
+                            "description"
+                          ]
+                        },
+                        "replaced_item_sku": {
+                          "type": "string",
+                          "maxLength": 200,
+                          "description": "SKU do item de troca direta selecionado pelo cliente (quando aplicável). Lojas sem troca direta ignoram."
+                        }
+                      },
+                      "required": [
+                        "sku",
+                        "quantity",
+                        "is_exchange",
+                        "reason"
+                      ]
+                    }
+                  },
+                  "address": {
+                    "type": "object",
+                    "description": "Endereço de onde o pacote sai, combinado na etapa de endereço (`address_step`). Tem que ser o mesmo enviado na cotação. Sem ele, vale o endereço do pedido, e a criação só recusa (`VALIDATION_FAILED` com `missing_address_fields`) campo que o pedido não traz. Todos os campos vêm juntos.",
+                    "properties": {
+                      "zipcode": {
+                        "type": "string",
+                        "maxLength": 20,
+                        "description": "CEP (somente dígitos)."
+                      },
+                      "street": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Logradouro."
+                      },
+                      "number": {
+                        "type": "string",
+                        "maxLength": 30,
+                        "description": "Número."
+                      },
+                      "neighborhood": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Bairro."
+                      },
+                      "city": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Cidade."
+                      },
+                      "state": {
+                        "type": "string",
+                        "description": "Sigla do estado (UF)."
+                      },
+                      "description": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "Complemento."
+                      }
+                    },
+                    "required": [
+                      "zipcode",
+                      "street",
+                      "number",
+                      "neighborhood",
+                      "city",
+                      "state"
+                    ]
+                  },
+                  "customer": {
+                    "type": "object",
+                    "description": "CPF/CNPJ e e-mail que o cliente informou porque o pedido veio sem eles, conforme `missing_customer_fields` de `address_step`. Envie só os campos listados: dado que o pedido já tem não é trocado, e enviá-lo é recusado. Sem eles, a reversa é criada com o campo em branco, menos o e-mail que o pedido não traz, que é recusado.",
+                    "properties": {
+                      "document": {
+                        "type": "string",
+                        "maxLength": 30,
+                        "description": "CPF ou CNPJ do cliente, com ou sem pontuação. Passa pela mesma validação da Central de Trocas."
+                      },
+                      "email": {
+                        "type": "string",
+                        "maxLength": 200,
+                        "description": "E-mail do cliente. Passa pela mesma validação da Central de Trocas e fica registrado na reversa."
+                      }
+                    }
+                  },
+                  "shipping": {
+                    "type": "object",
+                    "description": "Opção de logística reversa escolhida pelo cliente na cotação. Omita quando nenhuma opção podia ser escolhida.",
+                    "properties": {
+                      "shipping_company_id": {
+                        "type": "number",
+                        "enum": [
+                          2,
+                          5,
+                          6,
+                          9,
+                          10,
+                          12,
+                          13,
+                          14,
+                          15,
+                          16
+                        ],
+                        "description": "ID da transportadora, copiado de `shipping_options[].shipping_company_id`."
+                      },
+                      "is_collect": {
+                        "type": "boolean",
+                        "description": "True para coleta, false para postagem. Copiado da mesma opção escolhida."
+                      },
+                      "organisation_address_id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "ID do ponto de devolução da loja, copiado de `delivery_address_id`. Obrigatório para o ID 6 (loja física)."
+                      }
+                    },
+                    "required": [
+                      "shipping_company_id",
+                      "is_collect"
+                    ]
+                  },
+                  "retention": {
+                    "type": "object",
+                    "description": "Decisão do cliente sobre a retenção, copiada de `get_retention_offer`.",
+                    "properties": {
+                      "accepted": {
+                        "type": "boolean",
+                        "description": "True quando o cliente aceitou o vale-compras no lugar do reembolso."
+                      },
+                      "level": {
+                        "type": "number",
+                        "enum": [
+                          1,
+                          2
+                        ],
+                        "description": "Nível da oferta aceita: 1 (1ª tentativa) ou 2 (2ª tentativa). Sem o campo, vale o nível 1."
+                      }
+                    },
+                    "required": [
+                      "accepted"
+                    ]
+                  },
+                  "payment_bill": {
+                    "description": "Dados bancários para o reembolso. Colete quando `order.is_bank_transfer` for true e houver item em devolução. Sem eles a reversa é criada e o reembolso fica parado até um operador preencher no painel.",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "is_pix": {
+                            "type": "boolean",
+                            "enum": [
+                              true
+                            ],
+                            "description": "True quando o reembolso é via PIX; false quando é via transferência bancária."
+                          },
+                          "pix_type": {
+                            "type": "string",
+                            "enum": [
+                              "CPF ou CNPJ",
+                              "Telefone",
+                              "E-mail",
+                              "Chave aleatória"
+                            ],
+                            "description": "Tipo da chave PIX: 'CPF ou CNPJ', 'Telefone', 'E-mail' ou 'Chave aleatória'."
+                          },
+                          "pix_key": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "description": "Chave PIX informada pelo cliente. É gravada como veio: releia para o cliente antes de criar."
+                          }
+                        },
+                        "required": [
+                          "is_pix",
+                          "pix_type",
+                          "pix_key"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "is_pix": {
+                            "type": "boolean",
+                            "enum": [
+                              false
+                            ],
+                            "description": "True quando o reembolso é via PIX; false quando é via transferência bancária."
+                          },
+                          "bank_code": {
+                            "type": "string",
+                            "maxLength": 20,
+                            "description": "Código do banco (quando is_pix=false)."
+                          },
+                          "bank_agency": {
+                            "type": "string",
+                            "maxLength": 20,
+                            "description": "Agência bancária (quando is_pix=false)."
+                          },
+                          "bank_account": {
+                            "type": "string",
+                            "maxLength": 30,
+                            "description": "Conta bancária com o dígito (quando is_pix=false)."
+                          },
+                          "bank_account_type": {
+                            "type": "string",
+                            "enum": [
+                              "Corrente",
+                              "Poupança"
+                            ],
+                            "description": "Tipo da conta bancária: 'Corrente' ou 'Poupança'."
+                          }
+                        },
+                        "required": [
+                          "is_pix",
+                          "bank_code",
+                          "bank_agency",
+                          "bank_account",
+                          "bank_account_type"
+                        ]
+                      }
+                    ]
+                  },
+                  "language": {
+                    "type": "string",
+                    "enum": [
+                      "pt-BR",
+                      "en-US",
+                      "es"
+                    ],
+                    "default": "pt-BR",
+                    "description": "Idioma dos e-mails ao cliente."
+                  }
+                },
+                "required": [
+                  "confirm",
+                  "ecommerce_number",
+                  "customer_identifier",
+                  "items"
+                ]
+              },
+              "example": {
+                "confirm": true,
+                "ecommerce_number": "10234",
+                "customer_identifier": "maria.souza@exemplo.com",
+                "items": [
+                  {
+                    "sku": "CAM-AZUL-M",
+                    "quantity": 1,
+                    "is_exchange": false,
+                    "reason": {
+                      "description": "Não serviu",
+                      "sub_reason": "Ficou pequeno"
+                    }
+                  }
+                ],
+                "shipping": {
+                  "shipping_company_id": 2,
+                  "is_collect": false
+                },
+                "retention": {
+                  "accepted": false
+                },
+                "payment_bill": {
+                  "is_pix": true,
+                  "pix_type": "E-mail",
+                  "pix_key": "maria.souza@exemplo.com"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "description": "Sempre true na resposta de sucesso."
+                    },
+                    "reverse_order_id": {
+                      "type": "string",
+                      "description": "ID único da reversa criada na Troquecommerce (UUID v4)."
+                    },
+                    "ecommerce_number": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Número do pedido original da reversa."
+                    },
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "approved_with_shipping",
+                        "approved_without_shipping",
+                        "pending_analysis",
+                        "approved_shipping_failed"
+                      ],
+                      "description": "O que aconteceu na criação. Veja a tabela de `outcome` na descrição."
+                    },
+                    "status_id": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "ID numérico do status da reversa."
+                    },
+                    "status": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Status atual da reversa em português (conforme exibido no painel)."
+                    },
+                    "auto_approved": {
+                      "type": "boolean",
+                      "nullable": true,
+                      "description": "True quando a aprovação automática da loja aprovou a reversa. Null quando não foi possível reler."
+                    },
+                    "price": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Valor total dos itens em reversa."
+                    },
+                    "refund_value": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Valor que será reembolsado (parte da reversa marcada como devolução)."
+                    },
+                    "exchange_value": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Valor que será convertido em cupom de troca (parte da reversa marcada como troca)."
+                    },
+                    "retention": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Retenção gravada na reversa. Null quando a reversa foi criada mas a releitura falhou.",
+                      "properties": {
+                        "applied": {
+                          "type": "boolean",
+                          "description": "True quando houve retenção (valor retido maior que zero)."
+                        },
+                        "level": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "Nível de retenção aplicado. Null na retenção sem bônus da entrega em loja física."
+                        },
+                        "credit_instead_of_refund": {
+                          "type": "boolean",
+                          "description": "True quando a reversa fecha em vale-compras e não há reembolso a pagar."
+                        }
+                      },
+                      "required": [
+                        "applied",
+                        "level",
+                        "credit_instead_of_refund"
+                      ]
+                    },
+                    "items": {
+                      "type": "array",
+                      "description": "Itens incluídos na reversa.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "SKU do item."
+                          },
+                          "description": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Descrição do produto."
+                          },
+                          "quantity": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "Quantidade em reversa."
+                          },
+                          "is_exchange": {
+                            "type": "boolean",
+                            "description": "True se o item é troca; false se é devolução."
+                          }
+                        },
+                        "required": [
+                          "sku",
+                          "description",
+                          "quantity",
+                          "is_exchange"
+                        ]
+                      }
+                    },
+                    "shipping": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "Logística reversa contratada. Null quando nenhuma foi contratada.",
+                      "properties": {
+                        "shipping_company_id": {
+                          "type": "number",
+                          "nullable": true,
+                          "description": "ID da transportadora."
+                        },
+                        "courier_company": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Nome da transportadora responsável."
+                        },
+                        "courier_tracking_code": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Código de rastreio. Correios nunca tem código aqui: o cliente usa o Código de Postagem."
+                        },
+                        "posting_code": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Código de Postagem ou Código de Coleta, o mesmo que o painel mostra na reversa."
+                        },
+                        "is_collect": {
+                          "type": "boolean",
+                          "description": "True quando o frete reverso é coleta; false quando o cliente posta."
+                        },
+                        "tracking_status": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Status atual do rastreio, em português."
+                        },
+                        "tracking_url": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "URL para acompanhamento do rastreio no site da transportadora."
+                        },
+                        "posting_address": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Endereço de entrega do pacote. Só vem na entrega em loja física."
+                        },
+                        "label_in_email": {
+                          "type": "boolean",
+                          "description": "True quando existe etiqueta gravada para o envio. A etiqueta chega ao cliente pelo e-mail da loja."
+                        },
+                        "posting_due_date": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Data limite para o cliente postar a encomenda (AAAA-MM-DD). Null quando não há prazo."
+                        }
+                      },
+                      "required": [
+                        "shipping_company_id",
+                        "courier_company",
+                        "courier_tracking_code",
+                        "posting_code",
+                        "is_collect",
+                        "tracking_status",
+                        "tracking_url",
+                        "posting_address",
+                        "label_in_email",
+                        "posting_due_date"
+                      ]
+                    },
+                    "replaced_order_ecommerce_number": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Número do pedido de troca criado na plataforma (em trocas diretas integradas)."
+                    },
+                    "next_step": {
+                      "type": "string",
+                      "description": "Frase pronta, em inglês, dizendo ao assistente o que informar ao cliente agora."
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "reverse_order_id",
+                    "ecommerce_number",
+                    "outcome",
+                    "status_id",
+                    "status",
+                    "auto_approved",
+                    "price",
+                    "refund_value",
+                    "exchange_value",
+                    "retention",
+                    "items",
+                    "shipping",
+                    "replaced_order_ecommerce_number",
+                    "next_step"
+                  ]
+                },
+                "example": {
+                  "created": true,
+                  "reverse_order_id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263",
+                  "ecommerce_number": "10234",
+                  "outcome": "approved_with_shipping",
+                  "status_id": 2,
+                  "status": "Aguardando Envio",
+                  "auto_approved": true,
+                  "price": 89.9,
+                  "refund_value": 89.9,
+                  "exchange_value": 0,
+                  "retention": {
+                    "applied": false,
+                    "level": null,
+                    "credit_instead_of_refund": false
+                  },
+                  "items": [
+                    {
+                      "sku": "CAM-AZUL-M",
+                      "description": "Camiseta Azul - M",
+                      "quantity": 1,
+                      "is_exchange": false
+                    }
+                  ],
+                  "shipping": {
+                    "shipping_company_id": 2,
+                    "courier_company": "Correios PAC",
+                    "courier_tracking_code": null,
+                    "posting_code": "AP123456789BR",
+                    "is_collect": false,
+                    "tracking_status": "Aguardando Objeto na Agência",
+                    "tracking_url": null,
+                    "posting_address": null,
+                    "label_in_email": true,
+                    "posting_due_date": "2026-10-01"
+                  },
+                  "replaced_order_ecommerce_number": null,
+                  "next_step": "The store approved the request and booked the return shipment. ..."
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "ORDER_NOT_FOUND",
+                        "ORDER_NOT_ELIGIBLE",
+                        "VALIDATION_FAILED",
+                        "ADDRESS_NOT_EDITABLE",
+                        "ALREADY_HAS_ACTIVE_REVERSE",
+                        "DUPLICATE_SUSPECTED",
+                        "RETENTION_NOT_AVAILABLE",
+                        "RETENTION_LEVEL_NOT_AVAILABLE",
+                        "RETENTION_OFFER_CHANGED",
+                        "TEMPORARY_FAILURE",
+                        "CREATION_UNCONFIRMED",
+                        "CREATED_WITH_ERRORS"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    },
+                    "created": {
+                      "type": "boolean",
+                      "nullable": true,
+                      "description": "True se a reversa foi criada, false se não, null quando não foi possível confirmar."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "ORDER_NOT_FOUND",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/track_reverse_order": {
+      "post": {
+        "operationId": "track_reverse_order",
+        "summary": "Consulta o status das reversas de um pedido",
+        "description": "**Ferramenta:** `track_reverse_order` · **Permissão:** `reverse.track`\n\nRetorna as reversas abertas do pedido com o que a Central de Trocas mostra ao cliente: status, itens (de troca ou de devolução, com foto), logística reversa, cupom ou crédito e reembolso. Usa a mesma conferência de `prepare_reverse_order` (número do pedido mais CPF, CNPJ ou e-mail) e só enxerga aquele pedido.\n\nLê o pedido ao vivo e atualiza a cópia interna. Não altera a reversa: não cancela, não edita e não acelera nada.\n\n- Campo null quer dizer que a loja ainda não registrou aquele passo. Informe que ainda não aconteceu, sem estimar data.\n- Lista vazia não prova que nunca existiu reversa: canceladas, de presente e, na maioria das lojas, as de ruptura não aparecem, como na Central de Trocas.\n- Instrução de entrega, Código de Postagem, prazo de postagem e QR code do armário só vêm enquanto a reversa está Aguardando Envio, como na Central de Trocas.\n- Itens removidos pela loja não aparecem e, depois do recebimento, só aparecem os itens que a loja recebeu.",
+        "tags": [
+          "Atendimento ao consumidor"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"track_reverse_order\",\n    \"arguments\": {\n      \"ecommerce_number\": \"10234\",\n      \"customer_identifier\": \"maria.souza@exemplo.com\"\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce da loja, como o cliente vê na confirmação da compra. O `#` e os espaços são ignorados."
+                  },
+                  "customer_identifier": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "CPF (11 dígitos), CNPJ (14 dígitos) ou e-mail do cliente do pedido, sem pontuação. É conferido com o cliente gravado no pedido: se não bater, a resposta é a mesma de pedido inexistente."
+                  }
+                },
+                "required": [
+                  "ecommerce_number",
+                  "customer_identifier"
+                ]
+              },
+              "example": {
+                "ecommerce_number": "10234",
+                "customer_identifier": "maria.souza@exemplo.com"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "reverses": {
+                      "type": "array",
+                      "description": "Reversas abertas do pedido, da mais antiga para a mais nova.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "ID único da reversa na Troquecommerce (UUID v4)."
+                          },
+                          "ecommerce_number": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Número do pedido da reversa. Em marketplace pode ser um subpedido irmão do número consultado."
+                          },
+                          "status_id": {
+                            "type": "number",
+                            "nullable": true,
+                            "description": "ID numérico do status da reversa."
+                          },
+                          "status_name": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Status da reversa em português, com o texto que a loja mostra ao cliente na Central de Trocas."
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Data e hora de criação da reversa (ISO 8601)."
+                          },
+                          "replacement_order_number": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Número do pedido de troca criado na plataforma (em trocas diretas integradas)."
+                          },
+                          "items": {
+                            "type": "array",
+                            "description": "Itens da reversa, como a Central de Trocas lista. Itens removidos pela loja não aparecem e, depois do recebimento, só aparecem os itens que a loja recebeu (na reversa de ruptura aparecem todos).",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "sku": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "SKU do item."
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "Descrição do produto."
+                                },
+                                "quantity": {
+                                  "type": "number",
+                                  "nullable": true,
+                                  "description": "Quantidade em reversa."
+                                },
+                                "is_exchange": {
+                                  "type": "boolean",
+                                  "description": "True quando o item é de troca e false quando é de devolução com reembolso, como a Central de Trocas agrupa os itens. Devolução que o cliente aceitou fechar em vale-compras é gravada como troca."
+                                },
+                                "replacement_description": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "Novo produto escolhido pelo cliente no lugar do item, como a Central de Trocas mostra. Null quando o cliente não escolheu."
+                                },
+                                "image_url": {
+                                  "type": "string",
+                                  "nullable": true,
+                                  "description": "URL da foto do produto que a Central de Trocas mostra. Null quando a loja não tem foto do item."
+                                },
+                                "received": {
+                                  "type": "boolean",
+                                  "description": "True após o recebimento físico do item ser confirmado pela loja."
+                                }
+                              },
+                              "required": [
+                                "sku",
+                                "description",
+                                "quantity",
+                                "is_exchange",
+                                "replacement_description",
+                                "image_url",
+                                "received"
+                              ]
+                            }
+                          },
+                          "shipment": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Logística reversa, com o que a Central de Trocas mostra no status atual. Null quando não há nada a mostrar.",
+                            "properties": {
+                              "carrier": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Nome da transportadora responsável."
+                              },
+                              "is_collect": {
+                                "type": "boolean",
+                                "nullable": true,
+                                "description": "True quando o frete reverso é coleta; false quando o cliente posta."
+                              },
+                              "status": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Status atual do rastreio, como 'Aguardando Objeto na Agência', 'Coletado' ou 'Entregue'."
+                              },
+                              "handover_instruction": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "O que a Central de Trocas orienta o cliente a fazer com o pacote enquanto a reversa está Aguardando Envio, em português, como 'Poste os produtos na agência dos Correios mais próxima' ou 'Coleta no endereço informado'. Null nos demais status e nas opções sem orientação."
+                              },
+                              "posting_code": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Código de Postagem (quando `is_collect` é false) ou Código de Coleta (quando é true). Só vem enquanto a reversa está Aguardando Envio. Postagem em armário inteligente usa QR code, em `posting_qr_code_url`."
+                              },
+                              "posting_qr_code_url": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "URL da imagem do QR code que o cliente usa no armário inteligente, a mesma da Central de Trocas. Só na postagem em armário, enquanto a reversa está Aguardando Envio."
+                              },
+                              "posting_due_date": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data limite para o cliente postar a encomenda, no formato brasileiro `DD/MM/AAAA`. Só vem na postagem (`is_collect` false) fora do armário inteligente, enquanto a reversa está Aguardando Envio."
+                              },
+                              "posting_address": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Endereço de postagem, quando a loja definiu um (ex.: loja física). Null na coleta feita por transportadora personalizada, em que a Central de Trocas não mostra endereço."
+                              },
+                              "tracking_code": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Código de Rastreio da transportadora."
+                              },
+                              "tracking_url": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "URL para acompanhamento do rastreio no site da transportadora."
+                              },
+                              "posted_at": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data em que os produtos foram postados ou coletados (ISO 8601)."
+                              },
+                              "expected_delivery_date": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data prevista de entrega no destino (ISO 8601)."
+                              },
+                              "delivered_at": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data efetiva de entrega no destino (ISO 8601). Null até a entrega."
+                              }
+                            },
+                            "required": [
+                              "carrier",
+                              "is_collect",
+                              "status",
+                              "handover_instruction",
+                              "posting_code",
+                              "posting_qr_code_url",
+                              "posting_due_date",
+                              "posting_address",
+                              "tracking_code",
+                              "tracking_url",
+                              "posted_at",
+                              "expected_delivery_date",
+                              "delivered_at"
+                            ]
+                          },
+                          "store_credit": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Cupom ou crédito já gerado para a reversa. Null enquanto não houver.",
+                            "properties": {
+                              "is_store_credit": {
+                                "type": "boolean",
+                                "description": "True quando a loja paga em crédito na conta do cliente na loja, sem código para digitar. False quando a loja gera cupom (vale-compras)."
+                              },
+                              "code": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Código do cupom (vale-compras). Null quando `is_store_credit` é true."
+                              },
+                              "value": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Valor do cupom ou do crédito. Já inclui o bônus de retenção, exceto quando `bonus_value` vem preenchido: aí o bônus foi emitido à parte e o total do cliente é `value` + `bonus_value`."
+                              },
+                              "valid_until": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data de validade (ISO 8601)."
+                              },
+                              "issued_at": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data de geração (ISO 8601)."
+                              },
+                              "bonus_code": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Código de um segundo cupom, só com o bônus de retenção. Vem preenchido apenas nas lojas que emitem o bônus separado do cupom principal. Nas demais, o bônus já está somado em `value` e este campo é sempre null. Também é null quando `is_store_credit` é true."
+                              },
+                              "bonus_value": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Valor do bônus de retenção emitido à parte, como segundo cupom ou segundo crédito. Null quando o bônus não foi separado."
+                              }
+                            },
+                            "required": [
+                              "is_store_credit",
+                              "code",
+                              "value",
+                              "valid_until",
+                              "issued_at",
+                              "bonus_code",
+                              "bonus_value"
+                            ]
+                          },
+                          "refund": {
+                            "type": "object",
+                            "nullable": true,
+                            "description": "Reembolso já realizado. Null enquanto não houver.",
+                            "properties": {
+                              "method": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Forma do reembolso, com o texto gravado pela loja."
+                              },
+                              "value": {
+                                "type": "number",
+                                "nullable": true,
+                                "description": "Valor reembolsado."
+                              },
+                              "paid_at": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Data e hora do registro do reembolso (ISO 8601)."
+                              }
+                            },
+                            "required": [
+                              "method",
+                              "value",
+                              "paid_at"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ecommerce_number",
+                          "status_id",
+                          "status_name",
+                          "created_at",
+                          "replacement_order_number",
+                          "items",
+                          "shipment",
+                          "store_credit",
+                          "refund"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "reverses"
+                  ]
+                },
+                "example": {
+                  "reverses": [
+                    {
+                      "id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263",
+                      "ecommerce_number": "10234",
+                      "status_id": 2,
+                      "status_name": "Aguardando Envio",
+                      "created_at": "2026-09-21T14:03:11+00:00",
+                      "replacement_order_number": null,
+                      "items": [
+                        {
+                          "sku": "CAM-AZUL-M",
+                          "description": "Camiseta Azul - M",
+                          "quantity": 1,
+                          "is_removed": false,
+                          "received": false
+                        }
+                      ],
+                      "shipment": {
+                        "carrier": "Correios PAC",
+                        "is_collect": false,
+                        "status": "Aguardando Objeto na Agência",
+                        "posting_code": "AP123456789BR",
+                        "posting_due_date": "01/10/2026",
+                        "posting_address": null,
+                        "tracking_code": null,
+                        "tracking_url": null,
+                        "posted_at": null,
+                        "expected_delivery_date": null,
+                        "delivered_at": null
+                      },
+                      "store_credit": null,
+                      "refund": null
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "ORDER_NOT_FOUND",
+                        "ORDER_NOT_ELIGIBLE",
+                        "TEMPORARY_FAILURE"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "ORDER_NOT_FOUND",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/list_reverse_orders": {
+      "post": {
+        "operationId": "list_reverse_orders",
+        "summary": "Lista reversas com paginação e filtros",
+        "description": "**Ferramenta:** `list_reverse_orders` · **Permissão:** `reverse.list`\n\nRetorna uma lista paginada de reversas da loja, com filtros por status, intervalo de datas, pedido, cliente e código de rastreio. É o ponto de partida de qualquer consulta interna. A página começa em 1.\n\nSó lê. Enxerga todas as reversas da loja, sem pedir CPF: é para a equipe, nunca para chat aberto ao público.\n\n- Sem número do pedido, e-mail, rastreio ou datas, a busca cobre só os últimos 30 dias.\n- \"Em aberto\" não é um status. Para contar, pegue o total sem filtro e subtraia o total de `finalizado` e `cancelado`.\n- Quatro status aparecem na resposta mas não podem ser filtrados: Processando Reembolso, Em Fila de Reembolso, Pendência Interna e Pendência no Recebimento.",
+        "tags": [
+          "Operação interna da loja"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"list_reverse_orders\",\n    \"arguments\": {\n      \"status\": [\n        \"em_analise\"\n      ],\n      \"page_size\": 2\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "description": "Filtrar status das reversas. Aceita um ou mais valores.",
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "em_analise",
+                        "aguardando_envio",
+                        "aguardando_recebimento",
+                        "em_transito",
+                        "entrega_realizada",
+                        "aguardando_pagamento",
+                        "finalizado",
+                        "cancelado",
+                        "problemas_no_envio",
+                        "aguardando_nfd",
+                        "processando_pagamento",
+                        "falha_pagamento"
+                      ]
+                    }
+                  },
+                  "ecommerce_number": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Número do pedido original na plataforma de e-commerce. Retorna todas as reversas do pedido."
+                  },
+                  "customer_email": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "E-mail do cliente."
+                  },
+                  "tracking_code": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Código de rastreio da logística reversa."
+                  },
+                  "failed_payment_only": {
+                    "type": "boolean",
+                    "description": "True para listar só as reversas com falha no reembolso."
+                  },
+                  "created_from": {
+                    "type": "string",
+                    "description": "Início do intervalo de data de criação (AAAA-MM-DD). Use em conjunto com `created_to`."
+                  },
+                  "created_to": {
+                    "type": "string",
+                    "description": "Fim do intervalo de data de criação (AAAA-MM-DD). O dia inteiro entra na busca."
+                  },
+                  "page": {
+                    "type": "integer",
+                    "default": 1,
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Página da paginação. Começa em 1 (default)."
+                  },
+                  "page_size": {
+                    "type": "integer",
+                    "default": 10,
+                    "minimum": 1,
+                    "maximum": 25,
+                    "description": "Quantidade de reversas por página."
+                  }
+                }
+              },
+              "example": {
+                "status": [
+                  "em_analise"
+                ],
+                "page_size": 2
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "count": {
+                      "type": "number",
+                      "description": "Total de reversas que atendem aos filtros, somando todas as páginas."
+                    },
+                    "page": {
+                      "type": "number",
+                      "description": "Página retornada."
+                    },
+                    "page_size": {
+                      "type": "number",
+                      "description": "Quantidade de reversas por página."
+                    },
+                    "total_pages": {
+                      "type": "number",
+                      "description": "Total de páginas para os filtros e o `page_size` atuais."
+                    },
+                    "has_more": {
+                      "type": "boolean",
+                      "description": "True quando existe próxima página."
+                    },
+                    "orders": {
+                      "type": "array",
+                      "description": "Reversas da página, da mais nova para a mais antiga.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "description": "ID único da reversa na Troquecommerce (UUID v4). É o valor que `get_reverse_order` recebe."
+                          },
+                          "ecommerce_number": {
+                            "type": "string",
+                            "description": "Número do pedido original na plataforma de e-commerce da loja."
+                          },
+                          "status": {
+                            "type": "string",
+                            "description": "Status atual da reversa em português (conforme exibido no painel)."
+                          },
+                          "status_id": {
+                            "type": "number",
+                            "description": "ID numérico do status da reversa."
+                          },
+                          "reverse_type": {
+                            "type": "string",
+                            "description": "Tipo da reversa: 'Troca', 'Devolução', 'Troca e devolução' ou 'Sem Reembolso'."
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "description": "Data e hora de criação da reversa (ISO 8601)."
+                          },
+                          "updated_at": {
+                            "type": "string",
+                            "description": "Data e hora da última atualização da reversa (ISO 8601)."
+                          },
+                          "price": {
+                            "type": "number",
+                            "description": "Valor total dos itens em reversa."
+                          },
+                          "client": {
+                            "type": "object",
+                            "description": "Dados do cliente que abriu a reversa.",
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "description": "Nome do cliente."
+                              },
+                              "email": {
+                                "type": "string",
+                                "description": "E-mail do cliente. Vem mascarado nas lojas que ocultam o contato do cliente para o perfil de operador."
+                              },
+                              "phone": {
+                                "type": "string",
+                                "description": "Telefone do cliente (somente dígitos). Vem mascarado nas lojas que ocultam o contato do cliente para o perfil de operador."
+                              },
+                              "document": {
+                                "type": "string",
+                                "description": "Documento do cliente (CPF ou CNPJ). Vem completo só quando a regra \"Ocultar CPF do cliente\" está desligada no painel da loja. Senão vem mascarado, como `123*****909`."
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "email",
+                              "phone",
+                              "document"
+                            ]
+                          },
+                          "tracking_status": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "Status atual do rastreio. Null quando não há logística reversa contratada."
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "ecommerce_number",
+                          "status",
+                          "status_id",
+                          "reverse_type",
+                          "created_at",
+                          "updated_at",
+                          "price",
+                          "client",
+                          "tracking_status"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "count",
+                    "page",
+                    "page_size",
+                    "total_pages",
+                    "has_more",
+                    "orders"
+                  ]
+                },
+                "example": {
+                  "count": 14,
+                  "page": 1,
+                  "page_size": 2,
+                  "total_pages": 7,
+                  "has_more": true,
+                  "orders": [
+                    {
+                      "id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263",
+                      "ecommerce_number": "10234",
+                      "status": "Em Análise",
+                      "status_id": 1,
+                      "reverse_type": "Devolução",
+                      "created_at": "2026-09-21T14:03:11+00:00",
+                      "updated_at": "2026-09-21T14:03:11+00:00",
+                      "price": 89.9,
+                      "client": {
+                        "name": "Maria Eduarda Silva",
+                        "email": "maria.souza@exemplo.com",
+                        "phone": "11999999999",
+                        "document": "12345678909"
+                      },
+                      "tracking_status": null
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "FORBIDDEN",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/get_reverse_order": {
+      "post": {
+        "operationId": "get_reverse_order",
+        "summary": "Busca os detalhes de uma reversa pelo ID",
+        "description": "**Ferramenta:** `get_reverse_order` · **Permissão:** `reverse.read`\n\nRetorna os detalhes de uma reversa da loja: status, valores, cliente, logística reversa, cupom, dados bancários do reembolso e itens com motivo. Não aceita número do pedido: use `list_reverse_orders` para achar o ID.\n\nSó lê, e só alcança reversas da loja do token.\n\n- O código do cupom vem sempre mascarado. O código completo só se revela no painel, que registra quem revelou.\n- O documento do cliente segue a regra \"Ocultar CPF do cliente\" do painel da loja.\n- Não traz o comprovante de reembolso, as notas fiscais nem o histórico da reversa.",
+        "tags": [
+          "Operação interna da loja"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"get_reverse_order\",\n    \"arguments\": {\n      \"reverse_order_id\": \"3137c99b-c4cf-46bd-b0ed-d21bd3824263\"\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reverse_order_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID da reversa na Troquecommerce (UUID v4), como veio em `orders[].id`."
+                  }
+                },
+                "required": [
+                  "reverse_order_id"
+                ]
+              },
+              "example": {
+                "reverse_order_id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "description": "ID único da reversa na Troquecommerce (UUID v4)."
+                    },
+                    "ecommerce_number": {
+                      "type": "string",
+                      "description": "Número do pedido original na plataforma de e-commerce da loja."
+                    },
+                    "status": {
+                      "type": "string",
+                      "description": "Status atual da reversa em português (conforme exibido no painel)."
+                    },
+                    "status_id": {
+                      "type": "number",
+                      "description": "ID numérico do status da reversa."
+                    },
+                    "reverse_type": {
+                      "type": "string",
+                      "description": "Tipo da reversa: 'Troca', 'Devolução', 'Troca e devolução' ou 'Sem Reembolso'."
+                    },
+                    "created_at": {
+                      "type": "string",
+                      "description": "Data e hora de criação da reversa (ISO 8601)."
+                    },
+                    "updated_at": {
+                      "type": "string",
+                      "description": "Data e hora da última atualização da reversa (ISO 8601)."
+                    },
+                    "cancel_reason": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Motivo do cancelamento da reversa (preenchido apenas quando `status = 'Cancelado'`)."
+                    },
+                    "price": {
+                      "type": "number",
+                      "description": "Valor total dos itens em reversa."
+                    },
+                    "exchange_value": {
+                      "type": "number",
+                      "description": "Valor que será convertido em cupom de troca (parte da reversa marcada como troca)."
+                    },
+                    "refund_value": {
+                      "type": "number",
+                      "description": "Valor que será reembolsado (parte da reversa marcada como devolução)."
+                    },
+                    "client": {
+                      "type": "object",
+                      "description": "Dados do cliente que abriu a reversa.",
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "description": "Nome do cliente."
+                        },
+                        "email": {
+                          "type": "string",
+                          "description": "E-mail do cliente. Vem mascarado nas lojas que ocultam o contato do cliente para o perfil de operador."
+                        },
+                        "phone": {
+                          "type": "string",
+                          "description": "Telefone do cliente (somente dígitos). Vem mascarado nas lojas que ocultam o contato do cliente para o perfil de operador."
+                        },
+                        "document": {
+                          "type": "string",
+                          "description": "Documento do cliente (CPF ou CNPJ). Vem completo só quando a regra \"Ocultar CPF do cliente\" está desligada no painel da loja. Senão vem mascarado, como `123*****909`."
+                        },
+                        "address": {
+                          "type": "object",
+                          "description": "Endereço do cliente na reversa. É o endereço usado na logística reversa.",
+                          "properties": {
+                            "street": {
+                              "type": "string",
+                              "description": "Logradouro."
+                            },
+                            "number": {
+                              "type": "string",
+                              "description": "Número."
+                            },
+                            "description": {
+                              "type": "string",
+                              "nullable": true,
+                              "description": "Complemento."
+                            },
+                            "zipcode": {
+                              "type": "string",
+                              "description": "CEP (somente dígitos)."
+                            },
+                            "neighborhood": {
+                              "type": "string",
+                              "description": "Bairro."
+                            },
+                            "city": {
+                              "type": "string",
+                              "description": "Cidade."
+                            },
+                            "state": {
+                              "type": "string",
+                              "description": "Sigla do estado (UF)."
+                            },
+                            "country": {
+                              "type": "string",
+                              "description": "País."
+                            }
+                          },
+                          "required": [
+                            "street",
+                            "number",
+                            "description",
+                            "zipcode",
+                            "neighborhood",
+                            "city",
+                            "state",
+                            "country"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "email",
+                        "phone",
+                        "document",
+                        "address"
+                      ]
+                    },
+                    "refund_details": {
+                      "type": "object",
+                      "description": "Detalhes bancários do reembolso (informados pelo cliente). Vêm completos, como no painel.",
+                      "properties": {
+                        "is_pix": {
+                          "type": "boolean",
+                          "description": "True quando o reembolso é via PIX; false quando é via transferência bancária."
+                        },
+                        "pix_type": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Tipo da chave PIX (quando is_pix=true)."
+                        },
+                        "pix_key": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Chave PIX informada pelo cliente."
+                        },
+                        "bank_code": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Código do banco (quando is_pix=false)."
+                        },
+                        "bank_agency": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Agência bancária (quando is_pix=false)."
+                        },
+                        "bank_account": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Conta bancária (quando is_pix=false)."
+                        },
+                        "bank_account_type": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Tipo da conta bancária."
+                        },
+                        "document": {
+                          "type": "string",
+                          "nullable": true,
+                          "description": "Documento (CPF/CNPJ) do titular da conta de destino."
+                        }
+                      },
+                      "required": [
+                        "is_pix",
+                        "pix_type",
+                        "pix_key",
+                        "bank_code",
+                        "bank_agency",
+                        "bank_account",
+                        "bank_account_type",
+                        "document"
+                      ]
+                    },
+                    "is_collect": {
+                      "type": "boolean",
+                      "nullable": true,
+                      "description": "True quando a reversa é coletada na casa do cliente; false quando o cliente faz a postagem. Null sem logística reversa."
+                    },
+                    "tracking_status": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Status atual do rastreio. Null quando não há logística reversa contratada."
+                    },
+                    "courier_company": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Nome da transportadora responsável."
+                    },
+                    "courier_tracking_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Código de rastreamento da transportadora."
+                    },
+                    "posting_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Código de Postagem ou Código de Coleta, o mesmo que o painel mostra na reversa."
+                    },
+                    "tracking_url": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "URL para acompanhamento do rastreio no site da transportadora."
+                    },
+                    "posting_due_date": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Data limite para o cliente postar a encomenda (AAAA-MM-DD). Null quando não há prazo."
+                    },
+                    "posted_date": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Data em que o cliente postou a encomenda ou a transportadora coletou (ISO 8601)."
+                    },
+                    "delivery_date": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Data efetiva de entrega no destino (ISO 8601). Null até a entrega."
+                    },
+                    "coupon_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Código do cupom gerado para a reversa, sempre mascarado. Null sem cupom."
+                    },
+                    "coupon_value": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Valor monetário do cupom. Já inclui o bônus de retenção, exceto quando `coupon_bonus_code` vem preenchido: aí o bônus foi emitido à parte e o total do cliente é `coupon_value` + `coupon_bonus_value`."
+                    },
+                    "coupon_validity": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Data de validade do cupom (ISO 8601)."
+                    },
+                    "coupon_bonus_code": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Código de um segundo cupom, só com o bônus de retenção, mascarado. Vem preenchido apenas nas lojas que emitem o bônus separado do cupom principal. Nas demais, o bônus já está somado em `coupon_value` e este campo é sempre null."
+                    },
+                    "coupon_bonus_value": {
+                      "type": "number",
+                      "nullable": true,
+                      "description": "Valor do segundo cupom, só com o bônus de retenção. Considere apenas quando `coupon_bonus_code` vem preenchido."
+                    },
+                    "refund_paid_at": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "Data e hora do registro do reembolso (ISO 8601). Null enquanto não houver."
+                    },
+                    "items": {
+                      "type": "array",
+                      "description": "Itens incluídos na reversa, inclusive os adicionados por operador.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "SKU do item."
+                          },
+                          "description": {
+                            "type": "string",
+                            "description": "Descrição do produto (nome + variações)."
+                          },
+                          "quantity": {
+                            "type": "number",
+                            "description": "Quantidade efetiva em reversa."
+                          },
+                          "is_exchange": {
+                            "type": "boolean",
+                            "description": "True se o item é troca; false se é devolução."
+                          },
+                          "is_received": {
+                            "type": "boolean",
+                            "description": "True após o recebimento físico do item ser confirmado."
+                          },
+                          "is_retained": {
+                            "type": "boolean",
+                            "description": "True quando o item foi retido (retenção)."
+                          },
+                          "is_removed": {
+                            "type": "boolean",
+                            "description": "True se o item foi removido da reversa após análise."
+                          },
+                          "reason": {
+                            "type": "object",
+                            "description": "Motivo da troca/devolução informado pelo cliente.",
+                            "properties": {
+                              "description": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Motivo principal da troca/devolução."
+                              },
+                              "sub_reason": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Submotivo (quando a loja configurou submotivos)."
+                              },
+                              "client_comment": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Comentário do cliente."
+                              },
+                              "organisation_comment": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "Comentário da loja (interno)."
+                              },
+                              "image_url": {
+                                "type": "array",
+                                "nullable": true,
+                                "description": "URLs das imagens anexadas pelo cliente.",
+                                "items": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            "required": [
+                              "description",
+                              "sub_reason",
+                              "client_comment",
+                              "organisation_comment",
+                              "image_url"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "sku",
+                          "description",
+                          "quantity",
+                          "is_exchange",
+                          "is_received",
+                          "is_retained",
+                          "is_removed",
+                          "reason"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "ecommerce_number",
+                    "status",
+                    "status_id",
+                    "reverse_type",
+                    "created_at",
+                    "updated_at",
+                    "cancel_reason",
+                    "price",
+                    "exchange_value",
+                    "refund_value",
+                    "client",
+                    "refund_details",
+                    "is_collect",
+                    "tracking_status",
+                    "courier_company",
+                    "courier_tracking_code",
+                    "posting_code",
+                    "tracking_url",
+                    "posting_due_date",
+                    "posted_date",
+                    "delivery_date",
+                    "coupon_code",
+                    "coupon_value",
+                    "coupon_validity",
+                    "coupon_bonus_code",
+                    "coupon_bonus_value",
+                    "refund_paid_at",
+                    "items"
+                  ]
+                },
+                "example": {
+                  "id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263",
+                  "ecommerce_number": "10234",
+                  "status": "Finalizado",
+                  "status_id": 7,
+                  "reverse_type": "Devolução",
+                  "created_at": "2026-09-21T14:03:11+00:00",
+                  "updated_at": "2026-09-28T17:40:02+00:00",
+                  "cancel_reason": null,
+                  "price": 89.9,
+                  "exchange_value": 0,
+                  "refund_value": 89.9,
+                  "client": {
+                    "name": "Maria Eduarda Silva",
+                    "email": "maria.souza@exemplo.com",
+                    "phone": "11999999999",
+                    "document": "12345678909",
+                    "address": {
+                      "street": "Rua das Flores",
+                      "number": "120",
+                      "description": "Apto 42",
+                      "zipcode": "01310100",
+                      "neighborhood": "Bela Vista",
+                      "city": "São Paulo",
+                      "state": "SP",
+                      "country": "Brasil"
+                    }
+                  },
+                  "refund_details": {
+                    "is_pix": true,
+                    "pix_type": "E-mail",
+                    "pix_key": "maria.souza@exemplo.com",
+                    "bank_code": null,
+                    "bank_agency": null,
+                    "bank_account": null,
+                    "bank_account_type": null,
+                    "document": null
+                  },
+                  "is_collect": false,
+                  "tracking_status": "Entregue",
+                  "courier_company": "Correios PAC",
+                  "courier_tracking_code": null,
+                  "posting_code": "AP123456789BR",
+                  "tracking_url": null,
+                  "posting_due_date": "2026-10-01",
+                  "posted_date": "2026-09-23T10:15:00+00:00",
+                  "delivery_date": "2026-09-26T16:30:00+00:00",
+                  "coupon_code": null,
+                  "coupon_value": null,
+                  "coupon_validity": null,
+                  "coupon_bonus_code": null,
+                  "coupon_bonus_value": null,
+                  "refund_paid_at": "2026-09-28T17:40:02+00:00",
+                  "items": [
+                    {
+                      "sku": "CAM-AZUL-M",
+                      "description": "Camiseta Azul - M",
+                      "quantity": 1,
+                      "is_exchange": false,
+                      "is_received": true,
+                      "is_retained": false,
+                      "is_removed": false,
+                      "reason": {
+                        "description": "Não serviu",
+                        "sub_reason": "Ficou pequeno",
+                        "client_comment": null,
+                        "organisation_comment": null,
+                        "image_url": null
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "FORBIDDEN",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/create_order_exception": {
+      "post": {
+        "operationId": "create_order_exception",
+        "summary": "Cria uma exceção para um pedido",
+        "description": "**Ferramenta:** `create_order_exception` · **Permissão:** `exception.create`\n\nCria uma exceção para um pedido, o mesmo recurso da tela **Exceções** do painel e de `POST /exception/create` da API pública. Enquanto a exceção vale, o cliente consegue abrir troca ou devolução desse pedido na Central de Trocas mesmo fora do prazo configurado pela loja ou com o pedido em um status que a loja não aceita. Ele também pode abrir uma nova solicitação para um pedido que já teve reversa, com os itens que ainda não estão em outra reversa, desde que nenhuma reversa desse pedido esteja Em análise.\n\nGrava na loja e não pode ser desfeita pelo MCP. Não cria reversa e não envia e-mail.\n\n- A ferramenta não consulta a plataforma de e-commerce: grava o número sem o `#` e sem os espaços, e a Central de Trocas só libera o pedido quando o número gravado é idêntico ao do pedido.\n- Cada pedido aceita uma exceção por vez. Se já existir uma na tela Exceções, mesmo vencida, a resposta é `EXCEPTION_ALREADY_EXISTS`. Remover a exceção é só pela tela Exceções do painel.\n- `confirm` tem que ser `true`, só depois de a pessoa aprovar o resumo. A exceção é uma decisão da equipe da loja, nunca do cliente no chat.\n- A exceção aparece na tela Exceções com o nome do token como autor.",
+        "tags": [
+          "Operação interna da loja"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"create_order_exception\",\n    \"arguments\": {\n      \"confirm\": true,\n      \"ecommerce_number\": \"1234567\",\n      \"valid_until\": \"2026-12-31\",\n      \"reason\": \"Fora do prazo\"\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "confirm": {
+                    "type": "boolean",
+                    "enum": [
+                      true
+                    ],
+                    "description": "Sempre `true`, só depois de a pessoa aprovar o resumo com o número do pedido, a validade e o motivo."
+                  },
+                  "ecommerce_number": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 60,
+                    "description": "Número do pedido como a plataforma da loja mostra, o mesmo que o cliente digita na Central de Trocas. O primeiro `#` e os espaços são removidos antes de gravar."
+                  },
+                  "valid_until": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Último dia em que a exceção vale, em `AAAA-MM-DD`, no horário de Brasília: ela vale até o fim desse dia. De hoje até `2099-12-31`."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "description": "Motivo da exceção em texto livre, como deve aparecer na tela Exceções. O painel oferece justificativas como `Fora do prazo`, `Cliente VIP` e `Outros`."
+                  }
+                },
+                "required": [
+                  "confirm",
+                  "ecommerce_number",
+                  "valid_until",
+                  "reason"
+                ]
+              },
+              "example": {
+                "confirm": true,
+                "ecommerce_number": "1234567",
+                "valid_until": "2026-12-31",
+                "reason": "Fora do prazo"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "created": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "description": "Sempre `true`: a exceção foi gravada na loja."
+                    },
+                    "exception_id": {
+                      "type": "string",
+                      "description": "ID numérico da exceção, em formato de texto, o mesmo que `POST /exception/create` devolve. Não é um UUID v4."
+                    },
+                    "ecommerce_number": {
+                      "type": "string",
+                      "description": "Número do pedido como foi gravado, sem o `#` e sem os espaços."
+                    },
+                    "valid_until": {
+                      "type": "string",
+                      "format": "date",
+                      "description": "Último dia em que a exceção vale, em `AAAA-MM-DD`, no horário de Brasília."
+                    },
+                    "reason": {
+                      "type": "string",
+                      "description": "Motivo como foi gravado."
+                    }
+                  },
+                  "required": [
+                    "created",
+                    "exception_id",
+                    "ecommerce_number",
+                    "valid_until",
+                    "reason"
+                  ]
+                },
+                "example": {
+                  "created": true,
+                  "exception_id": "4821",
+                  "ecommerce_number": "1234567",
+                  "valid_until": "2026-12-31",
+                  "reason": "Fora do prazo"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "VALIDATION_FAILED",
+                        "EXCEPTION_ALREADY_EXISTS",
+                        "TEMPORARY_FAILURE"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "EXCEPTION_ALREADY_EXISTS",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tools/call/resend_shipping_email": {
+      "post": {
+        "operationId": "resend_shipping_email",
+        "summary": "Reenvia ao cliente o e-mail com as instruções de envio",
+        "description": "**Ferramenta:** `resend_shipping_email` · **Permissão:** `email.resend`\n\nReenvia ao cliente o último e-mail com as instruções de envio do produto (postagem ou coleta) que a reversa recebeu, montado com os dados atuais do rastreio. É o mesmo reenvio de `POST /email/resend` da API pública. Vai para o e-mail do cliente gravado na reversa.\n\nEnvia um e-mail de verdade a cada chamada. O reenvio fica registrado no histórico da reversa em nome do token.\n\n- Só funciona enquanto a reversa aguarda o envio do produto (status `Aguardando Envio` ou `Aguardando Recebimento`).\n- Reversa que nunca recebeu o e-mail com as instruções de envio responde `NO_SHIPPING_EMAIL`.\n- Não aceita número do pedido: use `list_reverse_orders` para achar o ID ou pegue o ID no endereço da reversa no painel (`/dashboard/orders/<id>`). Reversa de outra loja responde `REVERSE_ORDER_NOT_FOUND`.\n- Não escolhe outro destinatário nem outro modelo de e-mail.",
+        "tags": [
+          "Operação interna da loja"
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "tools/call (cURL)",
+            "source": "curl https://www.troquecommerce.com.br/api/mcp \\\n  --header 'Authorization: Bearer SEU-TOKEN' \\\n  --header 'Content-Type: application/json' \\\n  --header 'Accept: application/json, text/event-stream' \\\n  --data '{\n  \"jsonrpc\": \"2.0\",\n  \"id\": 1,\n  \"method\": \"tools/call\",\n  \"params\": {\n    \"name\": \"resend_shipping_email\",\n    \"arguments\": {\n      \"reverse_order_id\": \"3137c99b-c4cf-46bd-b0ed-d21bd3824263\"\n    }\n  }\n}'"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Argumentos da ferramenta (`params.arguments` do `tools/call`).",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reverse_order_id": {
+                    "type": "string",
+                    "format": "uuid",
+                    "description": "ID da reversa na Troquecommerce (UUID v4), como veio em `orders[].id` de `list_reverse_orders` ou no endereço da reversa no painel."
+                  }
+                },
+                "required": [
+                  "reverse_order_id"
+                ]
+              },
+              "example": {
+                "reverse_order_id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da ferramenta (`structuredContent`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "resent": {
+                      "type": "boolean",
+                      "enum": [
+                        true
+                      ],
+                      "description": "Sempre `true`: o e-mail saiu de novo para o e-mail do cliente gravado na reversa."
+                    },
+                    "reverse_order_id": {
+                      "type": "string",
+                      "description": "ID da reversa cujo e-mail foi reenviado."
+                    }
+                  },
+                  "required": [
+                    "resent",
+                    "reverse_order_id"
+                  ]
+                },
+                "example": {
+                  "resent": true,
+                  "reverse_order_id": "3137c99b-c4cf-46bd-b0ed-d21bd3824263"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Erro da ferramenta (`isError: true`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error_code",
+                    "message"
+                  ],
+                  "properties": {
+                    "error_code": {
+                      "type": "string",
+                      "enum": [
+                        "FORBIDDEN",
+                        "REVERSE_ORDER_NOT_FOUND",
+                        "NOT_AWAITING_SHIPMENT",
+                        "NO_SHIPPING_EMAIL",
+                        "EMAIL_NOT_SENT"
+                      ],
+                      "description": "Código do erro. Veja a tabela de erros na introdução."
+                    },
+                    "message": {
+                      "type": "string",
+                      "description": "Explicação em inglês, escrita para o assistente."
+                    }
+                  }
+                },
+                "example": {
+                  "error_code": "NOT_AWAITING_SHIPMENT",
+                  "message": "..."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

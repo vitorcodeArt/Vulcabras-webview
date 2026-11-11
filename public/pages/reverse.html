@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- A URL carrega o token da sessão: não enviar como referrer para outros sites -->
+    <meta name="referrer" content="no-referrer" />
+    <title>Troca e devolução</title>
+
+    <!-- Zendesk Webview SDK -->
+    <script>
+      (function (d, s, id) {
+        var js;
+        var fjs = d.getElementsByTagName(s)[0];
+        if (d.getElementById(id)) return;
+        js = d.createElement(s);
+        js.id = id;
+        js.src = "https://static.zdassets.com/conversation-extensions/latest/sdk.js";
+        fjs.parentNode.insertBefore(js, fjs);
+      })(document, "script", "WebviewSdkScript");
+
+      window.webviewSdkInit = function (WebviewSdk) {
+        window.WebviewSdk = WebviewSdk;
+        if (WebviewSdk.hasFeature("setTitle")) {
+          WebviewSdk.setTitle("Troca e devolução");
+        }
+      };
+    </script>
+
+    <!-- Tailwind CSS (Play CDN, versão fixada) -->
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+
+    <!-- Lucide Icons (versão fixada) -->
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+    <link rel="stylesheet" href="../css/reverse.css" />
+  </head>
+  <body class="bg-slate-50 text-slate-800 antialiased font-sans min-h-screen flex flex-col items-center justify-start select-none">
+    <div class="w-full max-w-[440px] min-h-screen bg-slate-50 flex flex-col relative shadow-sm border-x border-slate-200/60">
+      <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 px-4 border-b border-slate-200/80 flex items-center justify-between h-14 shrink-0 shadow-sm">
+        <div class="flex items-center gap-2.5">
+          <button
+            id="headerBackBtn"
+            class="hidden w-8 h-8 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 items-center justify-center transition-colors cursor-pointer"
+            aria-label="Voltar"
+          >
+            <i data-lucide="arrow-left" class="w-4 h-4"></i>
+          </button>
+          <div class="flex items-center gap-2">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
+              <i data-lucide="repeat" class="w-4 h-4"></i>
+            </div>
+            <span id="headerTitle" class="font-bold text-base text-slate-900 tracking-tight">Troca e devolução</span>
+          </div>
+        </div>
+        <span id="headerBadge" class="hidden text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"></span>
+      </header>
+
+      <main id="app" class="flex-1 px-4 py-4 flex flex-col justify-start overflow-y-auto">
+        <!-- Cada etapa do fluxo é desenhada aqui (public/js/reverse/screens) -->
+        <div id="screen" aria-live="polite">
+          <div class="flex flex-col items-center justify-center py-16 text-slate-500">
+            <div class="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
+            <p class="text-sm">Carregando...</p>
+          </div>
+        </div>
+        <noscript>
+          <p class="text-sm text-slate-700 text-center py-8">Ative o JavaScript para fazer sua troca ou devolução.</p>
+        </noscript>
+      </main>
+    </div>
+
+    <script type="module" src="../js/reverse/main.js"></script>
+  </body>
+</html>

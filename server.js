@@ -3,6 +3,11 @@ const path = require("path");
 const axios = require("axios");
 require("dotenv").config();
 
+const reverse = require("./routes/reverse");
+const { logBrandStatus } = require("./lib/brands");
+const { isSessionConfigured } = require("./lib/session");
+const { requireApiSecret, isApiSecretConfigured } = require("./lib/apiAuth");
+
 const app = express();
 
 const PORT = process.env.PORT || 3000;
@@ -70,6 +75,19 @@ app.get("/catalog", (req, res) => {
 });
 
 // ======================================================
+// TROCA E DEVOLUÇÃO (TroqueCommerce)
+// ======================================================
+
+// A URL traz o token da sessão: não registrar a query em log
+app.get("/reverse", (req, res) => {
+  res.set("Referrer-Policy", "no-referrer");
+  res.set("Cache-Control", "no-store");
+  res.sendFile(path.join(__dirname, "public", "pages", "reverse.html"));
+});
+
+app.use(reverse.createReverseRouter());
+
+// ======================================================
 // DADOS DE TESTE DO RASTREAMENTO
 // ======================================================
 
@@ -116,7 +134,8 @@ app.get("/api/tracking", (req, res) => {
 // ENVIAR WEBVIEW PARA UMA CONVERSA (DINÂMICO)
 // ======================================================
 
-app.post("/api/send-webview", async (req, res) => {
+// Exige WEBVIEW_API_SECRET quando a variável estiver definida (ver lib/apiAuth.js)
+app.post("/api/send-webview", requireApiSecret(), async (req, res) => {
   try {
     const { conversationId, type = "tracking", store = "mizuno", customText, buttonText } = req.body;
 
@@ -135,6 +154,7 @@ app.post("/api/send-webview", async (req, res) => {
     }
 
     const isCatalog = type === "catalog";
+    const isReverse = type === "reverse";
     const storeKey = String(store || "mizuno").toLowerCase();
 
     // valida a loja apenas quando o fluxo for de catálogo
@@ -145,19 +165,29 @@ app.post("/api/send-webview", async (req, res) => {
       });
     }
 
-    const baseUrl = process.env.WEBVIEW_URL ? process.env.WEBVIEW_URL.replace(/\/(webview|catalog)\/?$/, "") : `http://localhost:${PORT}`;
+    const baseUrl = process.env.WEBVIEW_URL ? process.env.WEBVIEW_URL.replace(/\/(webview|catalog|reverse)\/?$/, "") : `http://localhost:${PORT}`;
+
+    // Troca/devolução: URL com sessão assinada (conversationId, marca e expiração)
+    const reverseWebview = isReverse ? reverse.buildReverseWebview({ baseUrl, conversationId, store: storeKey, customText, buttonText }) : null;
+
+    if (reverseWebview && !reverseWebview.ok) {
+      return res.status(reverseWebview.status).json({
+        success: false,
+        error: reverseWebview.error,
+      });
+    }
 
     const targetPath = isCatalog ? "catalog" : "webview";
 
     const params = new URLSearchParams({ conversationId });
     if (isCatalog) params.set("store", storeKey);
 
-    const uri = `${baseUrl}/${targetPath}?${params.toString()}`;
+    const uri = isReverse ? reverseWebview.uri : `${baseUrl}/${targetPath}?${params.toString()}`;
 
-    const storeLabel = isCatalog ? VTEX_STORES[storeKey].label : null;
+    const storeLabel = isCatalog ? VTEX_STORES[storeKey].label : isReverse ? reverseWebview.label : null;
 
-    const messageText = customText || (isCatalog ? `Confira o nosso catálogo ${storeLabel}:` : "Consulte o rastreamento do seu pedido:");
-    const actionButtonText = buttonText || (isCatalog ? "Ver Catálogo" : "Ver rastreamento");
+    const messageText = isReverse ? reverseWebview.text : customText || (isCatalog ? `Confira o nosso catálogo ${storeLabel}:` : "Consulte o rastreamento do seu pedido:");
+    const actionButtonText = isReverse ? reverseWebview.buttonText : buttonText || (isCatalog ? "Ver Catálogo" : "Ver rastreamento");
 
     const payload = {
       author: { type: "business" },
@@ -185,10 +215,14 @@ app.post("/api/send-webview", async (req, res) => {
       }
     );
 
+    // Na troca/devolução, a resposta do Zendesk contém a URL com o token da sessão:
+    // devolver só o ID da mensagem, para o token não sair da conversa.
+    const responseData = isReverse ? { messageId: response.data?.messages?.[0]?.id || null } : response.data;
+
     res.json({
       success: true,
-      message: `Webview (${isCatalog ? `catálogo ${storeLabel}` : "rastreamento"}) enviada com sucesso`,
-      data: response.data,
+      message: `Webview (${isCatalog ? `catálogo ${storeLabel}` : isReverse ? `troca e devolução ${storeLabel}` : "rastreamento"}) enviada com sucesso`,
+      data: responseData,
     });
   } catch (error) {
     console.error("Erro ao enviar Webview:");
@@ -570,6 +604,14 @@ app.get("/api/catalog/product-details", async (req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor iniciado na porta ${PORT}`);
+
+  logBrandStatus();
+  if (!isSessionConfigured()) {
+    console.warn("Troca/Devolução: FLOW_SESSION_SECRET ausente ou curto; o fluxo /reverse ficará indisponível");
+  }
+  if (!isApiSecretConfigured()) {
+    console.warn("POST /api/send-webview sem proteção: defina WEBVIEW_API_SECRET depois de cadastrar o header no bot");
+  }
 
   if (process.env.NODE_ENV !== "production") {
     console.log(`Webview: http://localhost:${PORT}/webview`);
