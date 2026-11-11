@@ -59,6 +59,7 @@ async function init() {
   }
 
   state.brand = result.data.brand;
+  state.features = result.data.features || {};
   document.title = `Troca e devolução ${state.brand.label}`;
   const badge = document.getElementById("headerBadge");
   badge.textContent = state.brand.label;

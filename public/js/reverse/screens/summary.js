@@ -1,6 +1,6 @@
 // Tela 8 - Resumo e confirmação. O botão Confirmar desabilita no primeiro
 // clique. Resposta incerta (CREATION_UNCONFIRMED) nunca reenvia.
-import { state, identityBody, itemsPayload, findOrderItem, retentionAccepted, closesInCredit, invalidateFrom } from "../state.js";
+import { state, identityBody, itemsPayload, findOrderItem, retentionAccepted, closesInCredit, invalidateFrom, itemNeedsPhotos } from "../state.js";
 import { go, handleApiError, stepForField, flashHtml } from "../flow.js";
 import { api } from "../api.js";
 import { trackEvent } from "../tracking.js";
@@ -12,6 +12,12 @@ function row(label, valueHtml) {
   return `<div class="py-2.5 border-b border-slate-100 last:border-0"><p class="text-xs font-bold text-slate-500">${esc(label)}</p><div class="text-sm text-slate-800 mt-0.5">${valueHtml}</div></div>`;
 }
 
+function photoLabel(sku) {
+  if (!itemNeedsPhotos(sku)) return "";
+  const count = (state.photos[sku] || []).length;
+  return ` · ${count} ${count === 1 ? "foto" : "fotos"}`;
+}
+
 function itemsHtml() {
   return state.selectedSkus
     .map((sku) => {
@@ -20,7 +26,7 @@ function itemsHtml() {
       return `
         <div class="py-1.5">
           <p class="font-semibold">${esc(item?.description || sku)}${entry.quantity > 1 ? ` · ${esc(entry.quantity)} un.` : ""}</p>
-          <p class="text-xs text-slate-500">${esc(entry.reason)}${entry.sub_reason ? ` · ${esc(entry.sub_reason)}` : ""}</p>
+          <p class="text-xs text-slate-500">${esc(entry.reason)}${entry.sub_reason ? ` · ${esc(entry.sub_reason)}` : ""}${photoLabel(sku)}</p>
         </div>`;
     })
     .join("");
@@ -67,7 +73,24 @@ function submitBody() {
   if (state.type === "refund" && state.retention.decision) body.retention = state.retention.decision;
   if (state.shippingToken) body.shipping_option_token = state.shippingToken;
   if (sendsPaymentBill()) body.payment_bill = state.paymentBill;
+  if (state.photoResume) body.photo_resume = state.photoResume;
   return body;
+}
+
+// Com fotos (e sem token de nova tentativa), envia multipart:
+// campo "payload" com o JSON e as fotos em "photos_<índice do item>"
+function submitRequestBody() {
+  const body = submitBody();
+  const withPhotos = state.selectedSkus.filter((sku) => itemNeedsPhotos(sku) && (state.photos[sku] || []).length > 0);
+  if (withPhotos.length === 0 || state.photoResume) return body;
+
+  const form = new FormData();
+  form.append("payload", JSON.stringify(body));
+  state.selectedSkus.forEach((sku, index) => {
+    if (!withPhotos.includes(sku)) return;
+    state.photos[sku].forEach((photo, n) => form.append(`photos_${index}`, photo.blob, `${index}-${n + 1}.jpg`));
+  });
+  return form;
 }
 
 async function confirm(button) {
@@ -76,7 +99,7 @@ async function confirm(button) {
   showScreenError("");
   const restore = setBusy(button, "Enviando...");
 
-  const result = await api("/api/reverse/submit", submitBody());
+  const result = await api("/api/reverse/submit", submitRequestBody());
   submitting = false;
 
   if (result.ok) {
@@ -86,6 +109,8 @@ async function confirm(button) {
   }
 
   const { code, action, field, error } = result.data;
+  // As fotos já estão no ticket: a nova tentativa não reenvia
+  if (result.data.photo_resume) state.photoResume = result.data.photo_resume;
 
   // Pode ter sido criada: nunca reenviar; orienta acompanhar
   if (code === "CREATION_UNCONFIRMED") {

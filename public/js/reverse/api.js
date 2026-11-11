@@ -14,10 +14,16 @@ const OFFLINE = {
 
 const GENERIC = "Algo deu errado. Tente novamente em instantes.";
 
+// body: objeto (vai como JSON) ou FormData (multipart, com fotos)
 export async function api(path, body = {}) {
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  const headers = sessionHeaders();
+  // No multipart o navegador define o Content-Type com o boundary
+  if (isForm) delete headers["Content-Type"];
+
   let response;
   try {
-    response = await fetch(path, { method: "POST", headers: sessionHeaders(), body: JSON.stringify(body) });
+    response = await fetch(path, { method: "POST", headers, body: isForm ? body : JSON.stringify(body) });
   } catch {
     return { ok: false, status: 0, data: { ...OFFLINE } };
   }

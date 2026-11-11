@@ -143,6 +143,8 @@ async function submit() {
   if (changed || !state.prepared) {
     state.selectedSkus = [];
     state.selection = {};
+    state.photos = {};
+    state.photoResume = null;
     state.address = null;
     state.addressForcedOrder = false;
     state.customer = {};

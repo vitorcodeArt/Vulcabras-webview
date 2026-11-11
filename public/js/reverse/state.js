@@ -6,6 +6,8 @@
 
 export const state = {
   brand: null,
+  // Recursos liberados pelo servidor para a marca (ex.: { photos: true })
+  features: {},
   // exchange | refund | track
   type: null,
   // { orderNumber, identifier }
@@ -17,6 +19,10 @@ export const state = {
   selectedSkus: [],
   // sku -> { quantity, reason, sub_reason, comment }
   selection: {},
+  // sku -> [{ blob, url }] (fotos comprimidas, só em memória)
+  photos: {},
+  // Token do servidor para nova tentativa sem reenviar as fotos
+  photoResume: null,
   reasonIndex: 0,
   // Endereço: null = usar o do pedido; objeto = endereço informado
   address: null,
@@ -128,6 +134,8 @@ export function resetFlow() {
     prepared: null,
     selectedSkus: [],
     selection: {},
+    photos: {},
+    photoResume: null,
     reasonIndex: 0,
     address: null,
     addressMode: null,
@@ -145,6 +153,22 @@ export function resetFlow() {
   });
   state.brand = brand;
   state.identity = identity;
+}
+
+export function photosEnabled() {
+  return state.features?.photos === true;
+}
+
+// Itens cujo motivo exige foto (com as fotos liberadas)
+export function itemNeedsPhotos(sku) {
+  const reason = findReason(state.selection[sku]?.reason);
+  return photosEnabled() && Boolean(reason?.has_image);
+}
+
+export function removeAllPhotos(sku) {
+  for (const photo of state.photos[sku] || []) URL.revokeObjectURL(photo.url);
+  delete state.photos[sku];
+  state.photoResume = null;
 }
 
 export function takeFlash() {

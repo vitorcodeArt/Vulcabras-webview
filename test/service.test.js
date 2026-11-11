@@ -196,7 +196,7 @@ test("submit: motivo de atendente e motivo com foto não criam nada", async () =
   const service = createReverseService({ troque, conversation: fakeConversation() });
 
   await assert.rejects(service.submit(flow(), { ...EXCHANGE_BODY, items: [{ sku: "SKU-1", quantity: 1, reason: "Solicitação fora do prazo", comment: "x" }] }), { code: "HANDOFF_REQUIRED" });
-  await assert.rejects(service.submit(flow(), { ...EXCHANGE_BODY, items: [{ sku: "SKU-1", quantity: 1, reason: "Defeito", sub_reason: "Meu produto descolou", comment: "x" }] }), { code: "PHOTO_REQUIRED" });
+  await assert.rejects(service.submit(flow(), { ...EXCHANGE_BODY, items: [{ sku: "SKU-1", quantity: 1, reason: "Defeito", sub_reason: "Meu produto descolou", comment: "x" }] }), { code: "PHOTO_UNAVAILABLE" });
   assert.ok(!troque.calls.some((c) => c.name === "create_reverse_order"));
 });
 
@@ -372,4 +372,87 @@ test("handoff: motivo inválido é recusado e falha ao postar devolve message_po
   const service = createReverseService({ troque: fakeTroque({}), conversation: fakeConversation({ fail: true }) });
   await assert.rejects(service.handoff(flow(), { reason: "QUALQUER" }), { code: "INVALID_INPUT" });
   assert.deepEqual(await service.handoff(flow(), { reason: "ERROR", error_code: "minúsculo inválido" }), { message_posted: false });
+});
+
+// ---------- Fotos (Fase 3) ----------
+
+function fakeStorage({ enabled = true, fail = false } = {}) {
+  const stored = [];
+  const notes = [];
+  return {
+    stored,
+    notes,
+    isEnabled: () => enabled,
+    store: async (input) => {
+      if (fail) throw Object.assign(new Error("x"), { code: "ZENDESK_REQUEST_FAILED" });
+      stored.push(input);
+      const urlsBySku = {};
+      for (const [sku, list] of Object.entries(input.photosBySku)) urlsBySku[sku] = list.map((_, i) => `https://exemplo.zendesk.com/attachments/token/abc/?name=${sku}-${i + 1}.jpg`);
+      return { ticketId: 555, urlsBySku };
+    },
+    addNote: async (ticketId, body) => notes.push({ ticketId, body }),
+  };
+}
+
+const PHOTO_BODY = { ...EXCHANGE_BODY, items: [{ sku: "SKU-1", quantity: 1, reason: "Defeito", sub_reason: "Meu produto descolou", comment: "Descolou a sola" }] };
+const JPEG = { buffer: Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0]), mime: "image/jpeg" };
+
+test("submit com foto: exige foto, cria ticket, envia image_url e anota o resultado", async () => {
+  const troque = fakeTroque({ prepare_reverse_order: () => preparedOrder(), create_reverse_order: createdReverse() });
+  const storage = fakeStorage();
+  const service = createReverseService({ troque, conversation: fakeConversation(), storage });
+
+  await assert.rejects(service.submit(flow(), PHOTO_BODY, { photosByIndex: {} }), { code: "PHOTO_REQUIRED", field: "items[0].photos" });
+  assert.equal(storage.stored.length, 0);
+
+  const result = await service.submit(flow(), PHOTO_BODY, { photosByIndex: { 0: [JPEG, JPEG] } });
+  assert.equal(result.outcome, "approved_with_shipping");
+
+  const ticket = storage.stored[0];
+  assert.match(ticket.ticketBody, /Pedido: 1000000000001-01/);
+  assert.match(ticket.ticketBody, /Fotos anexadas: 2/);
+  assert.match(ticket.ticketBody, /Documento: 000\*{5}000/); // só o documento mascarado
+  assert.doesNotMatch(ticket.ticketBody, /\b00000000000\b/); // nunca o documento digitado
+
+  const create = troque.calls.find((c) => c.name === "create_reverse_order");
+  assert.equal(create.args.items[0].reason.image_url.length, 2);
+  assert.match(create.args.items[0].reason.image_url[0], /^https:\/\//);
+  assert.equal(storage.notes.length, 1);
+  assert.match(storage.notes[0].body, /Resultado no Troque/);
+});
+
+test("submit com foto: falha na criação devolve photo_resume e a nova tentativa não reenvia fotos", async () => {
+  const troque = fakeTroque({
+    prepare_reverse_order: () => preparedOrder(),
+    create_reverse_order: [new TroqueError("VALIDATION_FAILED"), createdReverse()],
+  });
+  const storage = fakeStorage();
+  const service = createReverseService({ troque, conversation: fakeConversation(), storage });
+
+  let resume;
+  await assert.rejects(service.submit(flow(), PHOTO_BODY, { photosByIndex: { 0: [JPEG] } }), (error) => {
+    resume = error.details.photo_resume;
+    return error.code === "VALIDATION_FAILED";
+  });
+  assert.ok(resume);
+  assert.match(storage.notes[0].body, /não foi criada/);
+
+  // Token de outra conversa não vale
+  await assert.rejects(service.submit(flow({ conversationId: "conv2" }), { ...PHOTO_BODY, photo_resume: resume }), { code: "PHOTO_REQUIRED" });
+
+  const result = await service.submit(flow(), { ...PHOTO_BODY, photo_resume: resume });
+  assert.equal(result.outcome, "approved_with_shipping");
+  assert.equal(storage.stored.length, 1); // um único ticket
+});
+
+test("submit com foto: falha no Zendesk vira PHOTO_UPLOAD_FAILED sem criar reversa", async () => {
+  const troque = fakeTroque({ prepare_reverse_order: () => preparedOrder() });
+  const service = createReverseService({ troque, conversation: fakeConversation(), storage: fakeStorage({ fail: true }) });
+  await assert.rejects(service.submit(flow(), PHOTO_BODY, { photosByIndex: { 0: [JPEG] } }), { code: "PHOTO_UPLOAD_FAILED" });
+  assert.ok(!troque.calls.some((c) => c.name === "create_reverse_order"));
+});
+
+test("features: fotos conforme o armazenamento", () => {
+  assert.deepEqual(createReverseService({ troque: fakeTroque({}), conversation: fakeConversation(), storage: fakeStorage() }).features(flow()), { photos: true });
+  assert.deepEqual(createReverseService({ troque: fakeTroque({}), conversation: fakeConversation(), storage: fakeStorage({ enabled: false }) }).features(flow()), { photos: false });
 });

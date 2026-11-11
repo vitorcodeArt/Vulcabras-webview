@@ -1,5 +1,5 @@
 // Tela 2 - Itens: escolha dos produtos e quantidades
-import { state, orderItems, invalidateFrom } from "../state.js";
+import { state, orderItems, invalidateFrom, removeAllPhotos } from "../state.js";
 import { go, openTracking } from "../flow.js";
 import { trackEvent } from "../tracking.js";
 import { render, heading, esc, money, safeUrl, alertBox, alertText, primaryButton, $, $all, on } from "../ui.js";
@@ -53,6 +53,7 @@ function toggle(sku) {
   if (index >= 0) {
     state.selectedSkus.splice(index, 1);
     delete state.selection[sku];
+    removeAllPhotos(sku);
   } else {
     state.selectedSkus.push(sku);
     state.selection[sku] = { quantity: 1, reason: null, sub_reason: null, comment: "" };

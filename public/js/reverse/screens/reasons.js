@@ -1,6 +1,8 @@
-// Tela 3 - Motivo de cada item (um motivo por item; submotivo e comentário
-// conforme as flags). Motivos que pedem foto ficam bloqueados até a Fase 3.
-import { state, reasonsForType, findReason, findOrderItem, invalidateFrom } from "../state.js";
+// Tela 3 - Motivo de cada item (um motivo por item; submotivo, comentário e
+// fotos conforme as flags). Sem fotos liberadas pelo servidor, motivos que
+// pedem foto vão para o atendente.
+import { state, reasonsForType, findReason, findOrderItem, invalidateFrom, photosEnabled } from "../state.js";
+import { compressImage, MAX_PHOTOS_PER_ITEM } from "../photos.js";
 import { goNext, refresh, requestHandoff, flashHtml } from "../flow.js";
 import { trackEvent } from "../tracking.js";
 import {
@@ -20,8 +22,7 @@ import {
 } from "../ui.js";
 
 const MAX_COMMENT = 1000;
-// Fase 2: ainda não há envio de fotos
-const PHOTOS_ENABLED = false;
+let processingPhotos = false;
 
 function currentSku() {
   return state.selectedSkus[state.reasonIndex];
@@ -38,7 +39,7 @@ function radioOption(name, value, label, checked, extra = "") {
 function blockedReason(reason) {
   if (!reason) return null;
   if (reason.handoff) return "REASON";
-  if (reason.has_image && !PHOTOS_ENABLED) return "PHOTO_REQUIRED";
+  if (reason.has_image && !photosEnabled()) return "PHOTO_REQUIRED";
   return null;
 }
 
@@ -77,13 +78,14 @@ export const reasonsScreen = {
               r.reason,
               r.reason,
               r.reason === entry.reason,
-              r.has_image && !PHOTOS_ENABLED ? ` <span class="ml-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">pede foto</span>` : "",
+              r.has_image ? ` <span class="ml-1 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-1.5 py-0.5 whitespace-nowrap">pede foto</span>` : "",
             ),
           )
           .join("")}
         <span data-error-for="reason" class="hidden text-xs font-semibold text-red-600"></span>
       </fieldset>
       ${reason && !blocked ? detailsHtml(reason, entry) : ""}
+      ${reason && !blocked && reason.has_image ? photosHtml(reason, sku) : ""}
       ${blocked ? blockedHtml(blocked) : ""}
       ${blocked ? "" : primaryButton("reasonNextBtn", state.reasonIndex < total - 1 ? "Próximo produto" : "Continuar", { icon: "arrow-right" })}
     `);
@@ -120,8 +122,101 @@ export const reasonsScreen = {
       reasonsScreen.render();
     });
     on("#reasonNextBtn", "click", () => next(entry));
+    bindPhotos(sku, entry);
   },
 };
+
+// ---------- Fotos ----------
+
+function photosHtml(reason, sku) {
+  const photos = state.photos[sku] || [];
+  const full = photos.length >= MAX_PHOTOS_PER_ITEM;
+  const pickButton = (id, label, icon, attrs) => `
+    <label class="flex-1 h-11 rounded-xl border border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50 text-sm font-bold text-slate-800 flex items-center justify-center gap-2 cursor-pointer ${full || processingPhotos ? "opacity-40 pointer-events-none" : ""}">
+      <i data-lucide="${icon}" class="w-4 h-4"></i>${esc(label)}
+      <input id="${id}" type="file" accept="image/*" ${attrs} class="sr-only" ${full ? "disabled" : ""} />
+    </label>`;
+
+  return `
+    <div class="flex flex-col gap-2">
+      <div class="flex items-center justify-between">
+        <span class="text-xs font-bold text-slate-600">Fotos do produto</span>
+        <span class="text-xs text-slate-400">${photos.length}/${MAX_PHOTOS_PER_ITEM}</span>
+      </div>
+      <p class="text-xs text-slate-500">${esc(reason.image_text || "Envie fotos que mostrem bem o produto e o problema.")}</p>
+      ${
+        photos.length
+          ? `<div class="grid grid-cols-3 gap-2">${photos
+              .map(
+                (photo, index) => `
+            <div class="relative">
+              <img src="${esc(photo.url)}" alt="Foto ${index + 1}" class="w-full aspect-square object-cover rounded-xl border border-slate-200" />
+              <button type="button" data-remove-photo="${index}" aria-label="Remover foto ${index + 1}"
+                class="absolute top-1 right-1 w-7 h-7 rounded-full bg-black/60 text-white flex items-center justify-center"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>`,
+              )
+              .join("")}</div>`
+          : ""
+      }
+      ${processingPhotos ? `<p class="text-xs text-slate-500" role="status">Preparando fotos...</p>` : ""}
+      <div class="flex gap-2">
+        ${pickButton("photoCamera", "Tirar foto", "camera", 'capture="environment"')}
+        ${pickButton("photoGallery", "Galeria", "image", "multiple")}
+      </div>
+      <span data-error-for="photos" class="hidden text-xs font-semibold text-red-600"></span>
+    </div>`;
+}
+
+// Guarda o comentário digitado antes de redesenhar a tela
+function keepComment(entry) {
+  const textarea = $("#reasonComment");
+  if (textarea) entry.comment = textarea.value.slice(0, MAX_COMMENT);
+}
+
+async function addPhotos(sku, entry, fileList) {
+  const files = Array.from(fileList || []);
+  if (files.length === 0) return;
+  keepComment(entry);
+
+  const list = (state.photos[sku] = state.photos[sku] || []);
+  const room = MAX_PHOTOS_PER_ITEM - list.length;
+  processingPhotos = true;
+  reasonsScreen.render();
+
+  let failed = 0;
+  for (const file of files.slice(0, room)) {
+    try {
+      const blob = await compressImage(file);
+      list.push({ blob, url: URL.createObjectURL(blob) });
+      trackEvent("photo_added", { step: "reasons", meta: { count: list.length, size_kb: Math.round(blob.size / 1024) } });
+    } catch {
+      failed += 1;
+    }
+  }
+  processingPhotos = false;
+  // Fotos mudaram: a nova tentativa precisa reenviar
+  state.photoResume = null;
+  reasonsScreen.render();
+
+  if (failed > 0) showFieldError("photos", "Não conseguimos ler uma das imagens. Tente outra foto.");
+  else if (files.length > room) showFieldError("photos", `Cada produto aceita até ${MAX_PHOTOS_PER_ITEM} fotos.`);
+}
+
+function bindPhotos(sku, entry) {
+  on("#photoCamera", "change", (event) => addPhotos(sku, entry, event.target.files));
+  on("#photoGallery", "change", (event) => addPhotos(sku, entry, event.target.files));
+  $all("[data-remove-photo]").forEach((button) =>
+    button.addEventListener("click", () => {
+      keepComment(entry);
+      const list = state.photos[sku] || [];
+      const [removed] = list.splice(Number(button.dataset.removePhoto), 1);
+      if (removed) URL.revokeObjectURL(removed.url);
+      state.photoResume = null;
+      trackEvent("photo_removed", { step: "reasons", meta: { count: list.length } });
+      reasonsScreen.render();
+    }),
+  );
+}
 
 function detailsHtml(reason, entry) {
   let html = "";
@@ -154,6 +249,7 @@ function blockedHtml(kind) {
     </div>`;
 }
 
+
 function next(entry) {
   clearFieldErrors();
   const reason = findReason(entry.reason);
@@ -176,8 +272,20 @@ function next(entry) {
   }
   entry.comment = comment.slice(0, MAX_COMMENT);
 
+  if (reason.has_image && (state.photos[currentSku()] || []).length === 0) {
+    showFieldError("photos", "Envie pelo menos uma foto do produto.");
+    trackEvent("validation_error", { step: "reasons", meta: { field: "photos" } });
+    return;
+  }
+
   // Um evento por item, com o motivo (sem o texto do comentário)
-  const meta = { reason: reason.reason, sub_reason: entry.sub_reason || null, item_index: state.reasonIndex, with_note: Boolean(entry.comment) };
+  const meta = {
+    reason: reason.reason,
+    sub_reason: entry.sub_reason || null,
+    item_index: state.reasonIndex,
+    with_note: Boolean(entry.comment),
+    photos: reason.has_image ? (state.photos[currentSku()] || []).length : 0,
+  };
 
   if (state.reasonIndex < state.selectedSkus.length - 1) {
     trackEvent("step_completed", { step: "reasons", meta });

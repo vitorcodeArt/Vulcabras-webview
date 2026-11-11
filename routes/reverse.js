@@ -2,7 +2,7 @@
 // ROTAS DO FLUXO DE TROCA E DEVOLUÇÃO (TroqueCommerce)
 // ======================================================
 // Todos os endpoints são POST, JSON, e exigem sessão assinada válida.
-// O upload de fotos (multipart) entra na Fase 3.
+// O submit também aceita multipart, quando há fotos (lib/reverse/photos.js).
 
 const express = require("express");
 const { getBrand, toPublicBrand, BRAND_KEYS } = require("../lib/brands");
@@ -10,6 +10,7 @@ const { createSessionToken, isValidConversationId, requireSession } = require(".
 const { ingestClientEvents } = require("../lib/tracking");
 const { createReverseService } = require("../lib/reverse/service");
 const { describeError } = require("../lib/reverse/errors");
+const { parseSubmitPayload } = require("../lib/reverse/photos");
 
 // Parâmetro da URL que carrega o token assinado
 const SESSION_QUERY_PARAM = "t";
@@ -68,6 +69,7 @@ function createReverseRouter({ service = createReverseService() } = {}) {
       success: true,
       brand: toPublicBrand(req.flow.brand),
       expiresAt: req.flow.expiresAt,
+      features: service.features(req.flow),
     });
   });
 
@@ -82,7 +84,6 @@ function createReverseRouter({ service = createReverseService() } = {}) {
     "/api/reverse/retention": service.retention,
     "/api/reverse/quote": service.quote,
     "/api/reverse/track": service.track,
-    "/api/reverse/submit": service.submit,
     "/api/reverse/finish": service.finish,
     "/api/reverse/handoff": service.handoff,
   };
@@ -98,6 +99,18 @@ function createReverseRouter({ service = createReverseService() } = {}) {
       }
     });
   }
+
+  // Submit: JSON ou multipart (payload + fotos)
+  router.post("/api/reverse/submit", requireSession, parseSubmitPayload, async (req, res) => {
+    try {
+      if (req.uploadError) throw req.uploadError;
+      const body = req.body && typeof req.body === "object" ? req.body : {};
+      const data = await service.submit(req.flow, body, { photosByIndex: req.photosByIndex || {} });
+      res.json({ success: true, ...data });
+    } catch (error) {
+      sendError(res, error, req.flow, "/api/reverse/submit");
+    }
+  });
 
   return router;
 }
