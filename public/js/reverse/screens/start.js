@@ -17,7 +17,12 @@ export const startScreen = {
     const flash = flashHtml();
 
     render(`
-      ${heading(`Troca e devolução${brand}`, "O que você precisa fazer?")}
+      <div class="brand-hero-card">
+        <p class="brand-eyebrow">Central de trocas${esc(brand)}</p>
+        <h2 class="brand-hero-title mt-2">Troca<br />e <span class="accent">devolução</span></h2>
+        <p class="text-sm mt-3" style="color: var(--aside-muted)">O que você precisa fazer?</p>
+      </div>
+      <div class="hidden md:block">${heading(`Troca e devolução${brand}`, "O que você precisa fazer?")}</div>
       ${flash}
       <div class="flex flex-col gap-3">
         ${OPTIONS.map(

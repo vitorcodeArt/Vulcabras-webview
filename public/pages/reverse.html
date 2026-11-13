@@ -7,6 +7,25 @@
     <meta name="referrer" content="no-referrer" />
     <title>Troca e devolução</title>
 
+    <!-- Tema da marca antes da primeira pintura (sem "piscar" no azul padrão).
+         As fontes de cada marca vêm do Google Fonts, só as da marca aberta. -->
+    <script>
+      (function () {
+        var FONTS = {
+          mizuno: "family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,800",
+          olympikus: "family=Roboto+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Roboto:wght@400;500;700",
+          underarmour: "family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700",
+        };
+        var store = (new URLSearchParams(window.location.search).get("store") || "").toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(FONTS, store)) return;
+        document.documentElement.setAttribute("data-brand", store);
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://fonts.googleapis.com/css2?" + FONTS[store] + "&display=swap";
+        document.head.appendChild(link);
+      })();
+    </script>
+
     <!-- Zendesk Webview SDK -->
     <script>
       (function (d, s, id) {
@@ -29,45 +48,71 @@
 
     <!-- Tailwind CSS (Play CDN, versão fixada) -->
     <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+    <script>
+      // A paleta "blue" usada nas telas passa a ser a cor da marca (variáveis em reverse.css)
+      var shade = function (n) {
+        return "rgb(var(--brand-" + n + ") / <alpha-value>)";
+      };
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              blue: { 50: shade(50), 100: shade(100), 200: shade(200), 300: shade(300), 400: shade(400), 500: shade(500), 600: shade(600), 700: shade(700), 800: shade(800), 900: shade(900) },
+            },
+            fontFamily: {
+              sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+              display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
+            },
+          },
+        },
+      };
+    </script>
 
     <!-- Lucide Icons (versão fixada) -->
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 
     <link rel="stylesheet" href="../css/reverse.css" />
   </head>
-  <body class="bg-slate-50 text-slate-800 antialiased font-sans min-h-screen flex flex-col items-center justify-start select-none">
-    <div class="w-full max-w-[440px] min-h-screen bg-slate-50 flex flex-col relative shadow-sm border-x border-slate-200/60">
-      <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 px-4 border-b border-slate-200/80 flex items-center justify-between h-14 shrink-0 shadow-sm">
-        <div class="flex items-center gap-2.5">
-          <button
-            id="headerBackBtn"
-            class="hidden w-8 h-8 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 items-center justify-center transition-colors cursor-pointer"
-            aria-label="Voltar"
-          >
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          </button>
-          <div class="flex items-center gap-2">
-            <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
-              <i data-lucide="repeat" class="w-4 h-4"></i>
-            </div>
-            <span id="headerTitle" class="font-bold text-base text-slate-900 tracking-tight">Troca e devolução</span>
+  <body class="brand-page text-slate-800 antialiased font-sans min-h-screen select-none">
+    <div class="shell">
+      <!-- Painel da marca: só em telas largas (link no navegador, tablet, widget em tela cheia) -->
+      <aside class="brand-aside" aria-label="Etapas">
+        <div class="brand-aside-inner">
+          <span class="brand-logo" data-brand-logo></span>
+          <div class="brand-aside-hero">
+            <p class="brand-eyebrow" id="asideEyebrow">Central de trocas</p>
+            <h1 class="brand-hero-title font-display">Troca e<br /><span class="accent">devolução</span></h1>
+            <p class="brand-aside-text">Troque, devolva ou acompanhe sua solicitação em poucos passos.</p>
           </div>
+          <ol class="stepper" id="stepper"></ol>
         </div>
-        <span id="headerBadge" class="hidden text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"></span>
-      </header>
+      </aside>
 
-      <main id="app" class="flex-1 px-4 py-4 flex flex-col justify-start overflow-y-auto">
-        <!-- Cada etapa do fluxo é desenhada aqui (public/js/reverse/screens) -->
-        <div id="screen" aria-live="polite">
-          <div class="flex flex-col items-center justify-center py-16 text-slate-500">
-            <div class="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
-            <p class="text-sm">Carregando...</p>
+      <div class="shell-main">
+        <header class="brand-header">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <button id="headerBackBtn" class="brand-back hidden" aria-label="Voltar">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <span id="headerTitle" class="brand-header-title font-display truncate">Troca e devolução</span>
           </div>
-        </div>
-        <noscript>
-          <p class="text-sm text-slate-700 text-center py-8">Ative o JavaScript para fazer sua troca ou devolução.</p>
-        </noscript>
-      </main>
+          <span class="brand-logo brand-logo-header" data-brand-logo></span>
+        </header>
+        <div class="progress" aria-hidden="true"><span id="progressFill"></span></div>
+
+        <main id="app" class="app-main">
+          <!-- Cada etapa do fluxo é desenhada aqui (public/js/reverse/screens) -->
+          <div id="screen" aria-live="polite">
+            <div class="flex flex-col items-center justify-center py-16 text-slate-500">
+              <div class="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3"></div>
+              <p class="text-sm">Carregando...</p>
+            </div>
+          </div>
+          <noscript>
+            <p class="text-sm text-slate-700 text-center py-8">Ative o JavaScript para fazer sua troca ou devolução.</p>
+          </noscript>
+        </main>
+      </div>
     </div>
 
     <script type="module" src="../js/reverse/main.js"></script>

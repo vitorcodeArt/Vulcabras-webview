@@ -63,7 +63,7 @@ export function on(selector, event, handler) {
 export function heading(title, subtitle = "") {
   return `
     <div>
-      <h2 class="text-xl font-extrabold text-slate-900 leading-tight">${esc(title)}</h2>
+      <h2 class="display-title text-[22px] text-slate-900">${esc(title)}</h2>
       ${subtitle ? `<p class="text-sm text-slate-500 mt-1">${esc(subtitle)}</p>` : ""}
     </div>`;
 }
@@ -96,7 +96,7 @@ export function card(html, extraClass = "") {
 export function primaryButton(id, label, { disabled = false, icon = "" } = {}) {
   return `
     <button id="${id}" type="button" ${disabled ? "disabled" : ""}
-      class="w-full h-12 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-sm font-bold transition-colors flex items-center justify-center gap-2">
+      class="btn-cta w-full h-12 text-sm font-bold flex items-center justify-center gap-2">
       ${icon ? `<i data-lucide="${icon}" class="w-4 h-4"></i>` : ""}<span>${esc(label)}</span>
     </button>`;
 }
@@ -104,7 +104,7 @@ export function primaryButton(id, label, { disabled = false, icon = "" } = {}) {
 export function secondaryButton(id, label, { icon = "" } = {}) {
   return `
     <button id="${id}" type="button"
-      class="w-full h-12 rounded-xl bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-800 text-sm font-bold transition-colors flex items-center justify-center gap-2">
+      class="btn-ghost w-full h-12 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-800 text-sm font-bold transition-colors flex items-center justify-center gap-2">
       ${icon ? `<i data-lucide="${icon}" class="w-4 h-4"></i>` : ""}<span>${esc(label)}</span>
     </button>`;
 }

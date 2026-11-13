@@ -12,6 +12,9 @@ const app = express();
 
 const PORT = process.env.PORT || 3000;
 
+// Render fica atrás de um proxy: req.ip passa a ser o IP real do cliente
+// (usado só nos limites do fluxo de troca e devolução)
+app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -86,6 +89,7 @@ app.get("/reverse", (req, res) => {
 });
 
 app.use(reverse.createReverseRouter());
+app.use(reverse.reverseErrorHandler);
 
 // ======================================================
 // DADOS DE TESTE DO RASTREAMENTO

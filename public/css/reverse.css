@@ -1,10 +1,170 @@
 /* ============================================================
-   TROCA E DEVOLUÇÃO - estilos complementares ao Tailwind
+   TROCA E DEVOLUÇÃO - identidade visual por marca + layout
+   O atributo data-brand no <html> (mizuno, olympikus, underarmour) troca as
+   variáveis abaixo. A paleta "blue" do Tailwind aponta para --brand-*
+   (configuração em reverse.html), então as telas não precisam mudar.
+   ============================================================ */
+
+/* ---------- Padrão (sem marca): azul neutro ---------- */
+:root {
+  --brand-50: 239 246 255;
+  --brand-100: 219 234 254;
+  --brand-200: 191 219 254;
+  --brand-300: 147 197 253;
+  --brand-400: 96 165 250;
+  --brand-500: 59 130 246;
+  --brand-600: 37 99 235;
+  --brand-700: 29 78 216;
+  --brand-800: 30 64 175;
+  --brand-900: 30 58 138;
+
+  --page-bg: #f8fafc;
+  --surface: #ffffff;
+  --header-bg: rgba(255, 255, 255, 0.95);
+  --header-ink: #0f172a;
+  --header-border: rgba(226, 232, 240, 0.8);
+  --back-bg: #f1f5f9;
+  --back-ink: #334155;
+  --aside-bg: rgb(var(--brand-700));
+  --aside-ink: #ffffff;
+  --aside-muted: rgba(255, 255, 255, 0.72);
+  --aside-line: rgba(255, 255, 255, 0.28);
+  --cta-bg: rgb(var(--brand-600));
+  --cta-hover: rgb(var(--brand-700));
+  --cta-ink: #ffffff;
+  --btn-radius: 12px;
+  --card-radius: 16px;
+  --font-body: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  --font-display: var(--font-body);
+  --display-weight: 800;
+  --display-tracking: -0.01em;
+  --display-transform: none;
+  --wordmark-style: normal;
+}
+
+/* ---------- Mizuno: violeta profundo, Montserrat, cabeçalho branco ---------- */
+[data-brand="mizuno"] {
+  --brand-50: 243 240 252;
+  --brand-100: 228 222 248;
+  --brand-200: 200 186 240;
+  --brand-300: 162 140 228;
+  --brand-400: 112 80 205;
+  --brand-500: 72 36 178;
+  --brand-600: 44 10 140;
+  --brand-700: 34 7 112;
+  --brand-800: 27 5 88;
+  --brand-900: 20 4 64;
+
+  --page-bg: #f6f5fa;
+  --header-bg: #ffffff;
+  --header-ink: #15093b;
+  --header-border: #e7e3f3;
+  --back-bg: #f1eefa;
+  --back-ink: #2c0a8c;
+  --aside-bg: #2c0a8c;
+  --cta-bg: #111111;
+  --cta-hover: #2c0a8c;
+  --btn-radius: 999px;
+  --font-body: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Montserrat", ui-sans-serif, system-ui, sans-serif;
+  --display-weight: 800;
+  --display-tracking: -0.02em;
+  --display-transform: uppercase;
+  --wordmark-style: italic;
+}
+
+/* ---------- Olympikus: roxo vivo, Roboto Condensed, cabeçalho roxo ---------- */
+[data-brand="olympikus"] {
+  --brand-50: 245 240 255;
+  --brand-100: 233 222 254;
+  --brand-200: 210 188 252;
+  --brand-300: 175 138 249;
+  --brand-400: 136 82 243;
+  --brand-500: 103 36 232;
+  --brand-600: 74 0 214;
+  --brand-700: 59 0 172;
+  --brand-800: 46 0 134;
+  --brand-900: 34 0 96;
+
+  --page-bg: #f5f4f8;
+  --header-bg: #4a00d6;
+  --header-ink: #ffffff;
+  --header-border: #3b00ac;
+  --back-bg: rgba(255, 255, 255, 0.16);
+  --back-ink: #ffffff;
+  --aside-bg: linear-gradient(160deg, #4a00d6 0%, #4a00d6 58%, #2b0080 100%);
+  --cta-bg: #0e0e0e;
+  --cta-hover: #4a00d6;
+  --btn-radius: 999px;
+  --font-body: "Roboto", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Roboto Condensed", "Roboto", ui-sans-serif, system-ui, sans-serif;
+  --display-weight: 800;
+  --display-tracking: 0;
+  --display-transform: uppercase;
+  --wordmark-style: italic;
+}
+
+/* ---------- Under Armour: preto, branco e vermelho, Archivo pesada ---------- */
+[data-brand="underarmour"] {
+  --brand-50: 255 241 241;
+  --brand-100: 255 224 224;
+  --brand-200: 255 192 192;
+  --brand-300: 255 138 138;
+  --brand-400: 255 77 77;
+  --brand-500: 245 25 35;
+  --brand-600: 227 0 15;
+  --brand-700: 186 0 12;
+  --brand-800: 146 0 10;
+  --brand-900: 92 0 6;
+
+  --page-bg: #f4f4f4;
+  --header-bg: #141414;
+  --header-ink: #ffffff;
+  --header-border: #2a2a2a;
+  --back-bg: rgba(255, 255, 255, 0.12);
+  --back-ink: #ffffff;
+  --aside-bg: #0d0d0d;
+  --aside-line: rgba(255, 255, 255, 0.18);
+  --cta-bg: #111111;
+  --cta-hover: #e3000f;
+  --btn-radius: 999px;
+  --card-radius: 14px;
+  --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --display-weight: 900;
+  --display-tracking: -0.03em;
+  --display-transform: uppercase;
+  --wordmark-style: normal;
+}
+
+/* ============================================================
+   BASE
    ============================================================ */
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: #d9e4ff #f1f5f9;
+  scrollbar-color: rgb(var(--brand-200)) #f1f5f9;
+}
+
+body.brand-page {
+  background: var(--page-bg);
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+}
+
+.display-title {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.1;
+}
+
+.display-upper {
+  text-transform: var(--display-transform);
 }
 
 @keyframes fadeIn {
@@ -20,4 +180,335 @@ html {
 
 .animate-fadeIn {
   animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fadeIn {
+    animation: none;
+  }
+}
+
+/* ---------- Botões ---------- */
+.btn-cta {
+  background: var(--cta-bg);
+  color: var(--cta-ink);
+  border-radius: var(--btn-radius);
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+.btn-cta:hover:not(:disabled) {
+  background: var(--cta-hover);
+}
+.btn-cta:active:not(:disabled) {
+  transform: scale(0.99);
+}
+.btn-cta:disabled {
+  background: #cbd5e1;
+  cursor: not-allowed;
+}
+.btn-ghost {
+  border-radius: var(--btn-radius);
+}
+.btn-cta:focus-visible,
+.btn-ghost:focus-visible,
+.brand-back:focus-visible {
+  outline: 2px solid rgb(var(--brand-500));
+  outline-offset: 2px;
+}
+
+/* ---------- Cabeçalho ---------- */
+.brand-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: 56px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 16px;
+  background: var(--header-bg);
+  color: var(--header-ink);
+  border-bottom: 1px solid var(--header-border);
+}
+.brand-header-title {
+  font-size: 16px;
+  text-transform: var(--display-transform);
+}
+.brand-back {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: var(--back-bg);
+  color: var(--back-ink);
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.brand-back.flex {
+  display: flex;
+}
+
+/* ---------- Logo (arquivo em /img/brands/<marca>.svg ou nome escrito) ---------- */
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+.brand-logo {
+  gap: 8px;
+}
+.brand-logo img {
+  height: 28px;
+  width: auto;
+  display: block;
+}
+/* O símbolo da Olympikus é mais compacto: um pouco menor ao lado do nome */
+[data-brand="olympikus"] .brand-logo img {
+  height: 22px;
+}
+/* Mizuno e Under Armour têm o nome sob o símbolo: um pouco maiores no cabeçalho */
+[data-brand="mizuno"] .brand-logo-header img,
+[data-brand="underarmour"] .brand-logo-header img {
+  height: 32px;
+}
+[data-brand="olympikus"] .wordmark {
+  color: #ffffff;
+}
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-style: var(--wordmark-style);
+  letter-spacing: var(--display-tracking);
+  text-transform: uppercase;
+  font-size: 17px;
+  line-height: 1;
+  white-space: nowrap;
+}
+.brand-logo-header .wordmark {
+  font-size: 14px;
+}
+[data-brand="mizuno"] .brand-logo-header .wordmark {
+  color: #2c0a8c;
+}
+
+/* ---------- Barra de progresso (telas estreitas) ---------- */
+.progress {
+  height: 3px;
+  background: rgb(var(--brand-100));
+  position: sticky;
+  top: 56px;
+  z-index: 39;
+}
+.progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: rgb(var(--brand-600));
+  transition: width 0.35s ease;
+}
+.progress.is-hidden {
+  visibility: hidden;
+}
+
+/* ---------- Estrutura ---------- */
+.shell {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+.shell-main {
+  width: 100%;
+  max-width: 440px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--page-bg);
+}
+.app-main {
+  flex: 1;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+.brand-aside {
+  display: none;
+}
+
+/* Cartão de destaque da marca (tela inicial em telas estreitas) */
+.brand-hero-card {
+  background: var(--aside-bg);
+  color: var(--aside-ink);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.brand-hero-card .brand-hero-title {
+  font-size: 30px;
+}
+[data-brand="underarmour"] .brand-hero-card {
+  border-left: 4px solid rgb(var(--brand-600));
+}
+
+.brand-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--aside-muted);
+}
+.brand-hero-title {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  text-transform: uppercase;
+  line-height: 0.98;
+}
+[data-brand="underarmour"] .brand-hero-title .accent,
+[data-brand="underarmour"] .brand-aside .brand-hero-title {
+  color: #ffffff;
+}
+[data-brand="underarmour"] .brand-hero-title .accent {
+  color: rgb(var(--brand-600));
+}
+
+/* ============================================================
+   TELAS LARGAS: painel da marca + conteúdo
+   ============================================================ */
+@media (min-width: 768px) {
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(300px, 34%) 1fr;
+  }
+  .brand-aside {
+    display: block;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    background: var(--aside-bg);
+    color: var(--aside-ink);
+    overflow-y: auto;
+  }
+  .brand-aside-inner {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    padding: 32px 36px 40px;
+  }
+  .brand-aside .brand-logo img {
+    height: 52px;
+  }
+  [data-brand="olympikus"] .brand-aside .brand-logo img {
+    height: 34px;
+  }
+  .brand-aside .wordmark {
+    font-size: 24px;
+    color: #ffffff;
+  }
+  .brand-aside .brand-hero-title {
+    font-size: clamp(36px, 3.4vw, 52px);
+    margin-top: 10px;
+  }
+  .brand-aside-text {
+    margin-top: 14px;
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--aside-muted);
+    max-width: 30ch;
+  }
+  .shell-main {
+    max-width: none;
+  }
+  .brand-header {
+    background: transparent;
+    color: #0f172a;
+    border-bottom: 0;
+    height: 72px;
+    padding: 0 32px;
+    max-width: 664px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .brand-header .brand-back {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+  }
+  .brand-header-title {
+    font-size: 14px;
+    color: #64748b;
+  }
+  .brand-logo-header,
+  .progress {
+    display: none;
+  }
+  .app-main {
+    width: 100%;
+    max-width: 664px;
+    margin: 0 auto;
+    padding: 8px 32px 48px;
+  }
+  .brand-hero-card {
+    display: none;
+  }
+}
+
+@media (min-width: 1280px) {
+  .shell {
+    grid-template-columns: 440px 1fr;
+  }
+}
+
+/* ---------- Etapas no painel lateral ---------- */
+.stepper {
+  list-style: none;
+  margin: auto 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.stepper li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--aside-muted);
+}
+.stepper .num {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1.5px solid var(--aside-line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.stepper li.is-current {
+  color: var(--aside-ink);
+}
+.stepper li.is-current .num {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #111111;
+}
+[data-brand="underarmour"] .stepper li.is-current .num {
+  background: rgb(var(--brand-600));
+  border-color: rgb(var(--brand-600));
+  color: #ffffff;
+}
+.stepper li.is-done {
+  color: var(--aside-ink);
+}
+.stepper li.is-done .num {
+  border-color: var(--aside-ink);
 }

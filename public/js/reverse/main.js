@@ -39,6 +39,43 @@ const SCREENS = {
 
 for (const [name, screen] of Object.entries(SCREENS)) registerScreen(name, screen);
 
+// Logo da marca (public/img/brands): versão colorida ou branca conforme o
+// fundo de cada lugar. A Olympikus usa o símbolo + o nome escrito, como no site.
+const LOGOS = {
+  mizuno: { header: "mizuno.png", aside: "mizuno-white.png", withName: false },
+  olympikus: { header: "olympikus-white.png", aside: "olympikus-white.png", withName: true },
+  underarmour: { header: "underarmour-white.png", aside: "underarmour-white.png", withName: false },
+};
+
+function applyBrand(brand) {
+  document.documentElement.setAttribute("data-brand", brand.key);
+  const eyebrow = document.getElementById("asideEyebrow");
+  if (eyebrow) eyebrow.textContent = `Central de trocas ${brand.label}`;
+
+  const logo = LOGOS[brand.key];
+  document.querySelectorAll("[data-brand-logo]").forEach((slot) => {
+    slot.innerHTML = "";
+    const name = document.createElement("span");
+    name.className = "wordmark";
+    name.textContent = brand.label;
+
+    if (!logo) {
+      slot.appendChild(name);
+      return;
+    }
+    const img = new Image();
+    img.alt = logo.withName ? "" : brand.label;
+    img.src = `/img/brands/${slot.classList.contains("brand-logo-header") ? logo.header : logo.aside}`;
+    // Sem a imagem, fica o nome escrito
+    img.onerror = () => {
+      img.remove();
+      if (!logo.withName) slot.appendChild(name);
+    };
+    slot.appendChild(img);
+    if (logo.withName) slot.appendChild(name);
+  });
+}
+
 async function init() {
   document.getElementById("headerBackBtn").addEventListener("click", back);
   render(loadingBlock());
@@ -61,9 +98,7 @@ async function init() {
   state.brand = result.data.brand;
   state.features = result.data.features || {};
   document.title = `Troca e devolução ${state.brand.label}`;
-  const badge = document.getElementById("headerBadge");
-  badge.textContent = state.brand.label;
-  badge.classList.remove("hidden");
+  applyBrand(state.brand);
 
   trackEvent("webview_opened", { step: "start" });
   go("start");

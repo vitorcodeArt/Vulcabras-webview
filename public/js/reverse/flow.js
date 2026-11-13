@@ -31,6 +31,51 @@ export function currentStep() {
   return current;
 }
 
+// Rótulos das etapas no painel lateral (telas largas) e na barra de progresso
+const STEP_LABELS = {
+  identify: "Identificação",
+  items: "Produtos",
+  reasons: "Motivo",
+  address: "Endereço",
+  retention: "Vale-compras",
+  shipping: "Envio",
+  refund: "Reembolso",
+  summary: "Resumo",
+  result: "Pronto",
+  track: "Acompanhar",
+};
+// Antes de escolher o tipo, o painel mostra um resumo do caminho
+const PREVIEW_STEPS = ["identify", "items", "reasons", "address", "shipping", "summary"];
+
+function visibleSteps() {
+  if (state.type === "track") return ["identify", "track"];
+  if (!state.type) return [];
+  return ORDER.slice(1).filter(isNeeded);
+}
+
+function updateProgress(name) {
+  const steps = visibleSteps();
+  const index = steps.indexOf(name);
+
+  const fill = document.getElementById("progressFill");
+  if (fill) {
+    const bar = fill.parentElement;
+    bar.classList.toggle("is-hidden", index < 0 && name !== "start");
+    fill.style.width = index < 0 ? "0%" : `${Math.round(((index + 1) / steps.length) * 100)}%`;
+  }
+
+  const stepper = document.getElementById("stepper");
+  if (stepper) {
+    const list = steps.length ? steps : PREVIEW_STEPS;
+    stepper.innerHTML = list
+      .map((step, i) => {
+        const status = index < 0 ? "" : i < index ? "is-done" : i === index ? "is-current" : "";
+        return `<li class="${status}"${i === index ? ' aria-current="step"' : ""}><span class="num">${i + 1}</span>${STEP_LABELS[step]}</li>`;
+      })
+      .join("");
+  }
+}
+
 function updateHeader(screen) {
   const title = document.getElementById("headerTitle");
   if (title) title.textContent = screen.title || "Troca e devolução";
@@ -48,6 +93,7 @@ function show(name) {
   current = name;
   enteredAt = Date.now();
   updateHeader(screen);
+  updateProgress(name);
   trackEvent("step_viewed", { step: name });
   // onEnter: só ao entrar na tela (não em refresh de subetapa)
   if (typeof screen.onEnter === "function") screen.onEnter();
@@ -83,6 +129,7 @@ export function back() {
 export function refresh() {
   if (current) {
     updateHeader(screens[current]);
+    updateProgress(current);
     screens[current].render();
   }
 }
