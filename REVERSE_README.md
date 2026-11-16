@@ -77,6 +77,7 @@ curl -X POST https://<app>.onrender.com/api/send-webview \
 | `FLOW_HASH_SALT` | Sal do hash do número do pedido no rastreamento (não trocar depois de em uso) |
 | `WEBVIEW_API_SECRET` | Protege o `send-webview`. Cadastre o header no bot antes de definir |
 | `BOT_API_SECRET` | Liga e protege a API do bot (`/api/bot/reverse/*`). Vazio = API desligada |
+| `BOT_TICKET_TAG` | Tag de canal do ticket com fotos vindo do bot (padrão `canal_whatsapp`) |
 | `TRUST_PROXY_HOPS` | Proxies na frente do app (padrão 1, o do Render), para os limites por IP |
 
 ## Endpoints
@@ -106,7 +107,7 @@ Para o agente de IA do Zendesk montar o fluxo sem webview. Usa o mesmo serviço 
 - **Nada fica no servidor:** cada chamada leva o corpo base mais as escolhas acumuladas.
 - **Escolhas por número:** `item_option`, `reason_option`, `sub_reason_option`, `shipping_option` e `pix_type` aceitam `2` ou `"2"` (posição na lista numerada da etapa anterior).
 - **Nada é postado na conversa:** quem responde ao cliente é o bot, com o `message` ou os campos `*_text`.
-- **Limites desta versão:** um produto por solicitação; motivo com foto vai para atendente; reembolso só por PIX; pedido sem CPF ou e-mail no cadastro vai para atendente.
+- **Limites desta versão:** um produto por solicitação; reembolso só por PIX; pedido sem CPF ou e-mail no cadastro vai para atendente. Motivo com foto segue pelo bot quando as fotos estão ligadas (`REVERSE_PHOTOS_ENABLED`); desligadas, vai para atendente.
 
 Corpo base de todas as rotas: `conversation_id`, `store` (`mizuno`, `olympikus`, `underarmour`), `order_number`, `customer_identifier` (CPF, CNPJ ou e-mail).
 
@@ -114,14 +115,16 @@ Corpo base de todas as rotas: `conversation_id`, `store` (`mizuno`, `olympikus`,
 | --- | --- | --- |
 | `lookup` | nada | `eligible`, `first_name`, `items_count`, `items_text`, `item_N_name`, `existing_count`, `existing_text`, `address_mode` (`none`, `confirm`, `ask_full_address`), `address_text`, `is_bank_transfer`, `pix_types_text` |
 | `reasons` | `type` (`troca`/`devolução` ou `exchange`/`refund`), `item_option` | `reasons_count`, `reasons_text`, `item_max_quantity` |
-| `reason_detail` | + `reason_option` | `goes_to_agent`, `requires_photo`, `has_sub_reasons`, `sub_reasons_text`, `requires_comment` |
+| `reason_detail` | + `reason_option` | `goes_to_agent`, `requires_photo`, `has_sub_reasons`, `sub_reasons_text`, `requires_comment`. Com foto: `next: "photos"`, `photo_text`, `photo_token` |
+| `photos` | + `photo_token` | `photos_count` (imagens recebidas desde o pedido). Nenhuma: `PHOTO_REQUIRED` |
 | `retention` | + `sub_reason_option`, `comment`, `quantity` | `available`, `mode`, `must_choose`, `offer_text`, `has_better_offer`, `better_offer_text`, `needs_pix_if_declined` |
 | `quote` | + endereço (abaixo), `retention_accepted` | `options_count`, `options_text` |
 | `summary` | + `shipping_option`, `retention_level`, `pix_type`, `pix_key`, `address_confirmed` | `summary_text`, `confirmation_token` |
-| `submit` | tudo do `summary` + `confirmation_token` | `reverse_order_id`, `message`, `posting_code`, `posting_due_date`, `carrier`, `tracking_url`, `replayed` |
+| `submit` | tudo do `summary` + `confirmation_token` (+ `photo_resume` numa nova tentativa) | `reverse_order_id`, `message`, `posting_code`, `posting_due_date`, `carrier`, `tracking_url`, `replayed` |
 | `track` | nada | `reverses_count`, `track_text` |
 
 - **Endereço:** se `address_mode` for `confirm`, mostrar `address_text` e perguntar. Se o cliente confirmar, envie `address_confirmed: "sim"`. Se não (ou em `ask_full_address`), envie `address_zipcode`, `address_street`, `address_number`, `address_neighborhood`, `address_city`, `address_state` e, opcionalmente, `address_complement`.
+- **Fotos:** o cliente manda as imagens na própria conversa. O servidor lista as mensagens pelo Sunshine e usa as imagens do cliente enviadas depois do `photo_token` (até 10, as mais recentes). Nada é baixado nem enviado antes do `submit`; aí o servidor baixa, confere se é JPEG, PNG ou WebP e segue o caminho do webview (ticket resolvido com a tag `canal_whatsapp`, URLs no `image_url`). Se a criação falhar depois do ticket, o erro traz `photo_resume`: envie de volta no próximo `submit` para não duplicar ticket nem fotos. Todas as chamadas depois do pedido de foto levam o `photo_token`.
 - **Confirmação:** o `submit` só cria com o `confirmation_token` do `summary`. Se qualquer escolha mudou depois do resumo, ele responde `CONFIRMATION_REQUIRED` com `next: "summary"`. Repetir o `submit` devolve a mesma solicitação (`replayed: true`).
 
 ## Regras que não podem mudar

@@ -7,7 +7,8 @@
 // - escolhas por número (item_option, reason_option...), resolvidas aqui;
 // - nada é guardado no servidor: o bot reenvia pedido e escolhas a cada chamada;
 // - o bot fala com o cliente (nada é postado na conversa por aqui).
-// Nesta versão: um produto por solicitação e sem fotos (motivo com foto vai para atendente).
+// Nesta versão: um produto por solicitação. Fotos: o cliente manda na própria
+// conversa e o servidor busca as imagens pelo Sunshine (rota "photos").
 
 const crypto = require("crypto");
 const express = require("express");
@@ -16,6 +17,8 @@ const { isValidConversationId, signData, verifyData } = require("../lib/session"
 const { requireApiSecret } = require("../lib/apiAuth");
 const { createRateLimiter, LIMIT_MESSAGE } = require("../lib/rateLimit");
 const { createReverseService } = require("../lib/reverse/service");
+const { createConversationClient } = require("../lib/zendesk/conversation");
+const { detectImageType, MAX_PER_ITEM } = require("../lib/reverse/photos");
 const { ReverseError, describeError } = require("../lib/reverse/errors");
 const { submitConfirmationMessage, formatDate } = require("../lib/reverse/messages");
 const v = require("../lib/reverse/validation");
@@ -24,6 +27,12 @@ const f = require("../lib/bot/format");
 
 const MINUTE = 60 * 1000;
 const CONFIRMATION_TTL_S = 30 * 60;
+// Validade do pedido de fotos (o cliente pode demorar para achar a foto)
+const PHOTO_TOKEN_TTL_S = 2 * 60 * 60;
+// Margem para o relógio do Zendesk e o momento exato do pedido
+const PHOTO_SINCE_MARGIN_MS = 60 * 1000;
+const MAX_TOTAL_PHOTO_BYTES = 40 * 1024 * 1024;
+const DEFAULT_PHOTO_TEXT = "Envie aqui na conversa uma ou mais fotos do produto que mostrem o problema. Quando terminar, me avise.";
 
 // action do serviço -> "next" do bot
 const NEXT = {
@@ -44,7 +53,10 @@ const BOT_MESSAGES = {
   SERVICE_ERROR: "A troca e devolução está indisponível no momento. Vou te encaminhar para um atendente.",
   HANDOFF_REQUIRED: "Para este motivo, um atendente precisa analisar sua solicitação. Vou te encaminhar.",
   PHOTO_UNAVAILABLE: "Para este motivo, precisamos de fotos do produto. Vou te encaminhar para um atendente.",
-  PHOTO_REQUIRED: "Para este motivo, precisamos de fotos do produto. Vou te encaminhar para um atendente.",
+  PHOTO_REQUIRED: "Ainda não recebi a foto do produto. Envie a foto aqui na conversa e me avise quando terminar.",
+  PHOTO_INVALID: "Não consegui abrir as fotos enviadas. Envie a imagem de novo (JPG ou PNG).",
+  PHOTO_TOO_LARGE: "As fotos ficaram grandes demais. Envie menos fotos ou imagens menores.",
+  PHOTO_UPLOAD_FAILED: "Não consegui buscar as fotos agora. Tente novamente em instantes.",
   CREATION_UNCONFIRMED: "Não conseguimos confirmar se sua solicitação foi registrada. Não envie de novo: em alguns minutos, consulte o status da solicitação.",
   ALREADY_HAS_ACTIVE_REVERSE: "Este pedido já tem uma solicitação em andamento. Posso te mostrar o status dela.",
   DUPLICATE_SUSPECTED: "Recebemos uma solicitação deste pedido há poucos minutos. Posso te mostrar o status antes de enviar outra.",
@@ -102,6 +114,7 @@ const FIELD_MESSAGES = {
   retention_level: "Oferta de vale-compras inválida.",
   pix_type: "Escolha o tipo da chave PIX pelo número.",
   pix_key: "Para o reembolso, informe uma chave PIX válida.",
+  photo_token: "O pedido de fotos expirou ou não foi feito. Chame o reason_detail de novo para pedir as fotos.",
 };
 
 function errorBody(error) {
@@ -122,6 +135,8 @@ function errorBody(error) {
   // Motivo para o bot escolher a mensagem de transferência
   if (result.next === "handoff") result.handoff_reason = body.code === "PHOTO_UNAVAILABLE" || body.code === "PHOTO_REQUIRED" ? "PHOTO_REQUIRED" : body.code === "HANDOFF_REQUIRED" ? "REASON" : body.code === "TOO_MANY_ATTEMPTS" ? "NOT_FOUND" : "ERROR";
   if (Array.isArray(body.missing_address_fields)) result.missing_address_fields = body.missing_address_fields.map((x) => `address_${x}`);
+  // Nova tentativa do submit sem reenviar fotos nem criar outro ticket
+  if (typeof body.photo_resume === "string") result.photo_resume = body.photo_resume;
   return { ...result, internalCode };
 }
 
@@ -142,7 +157,7 @@ function decisionHash(parts) {
   return crypto.createHmac("sha256", key).update(JSON.stringify(parts)).digest("base64url").slice(0, 32);
 }
 
-function createBotRouter({ service = createReverseService(), now = () => Date.now() } = {}) {
+function createBotRouter({ service = createReverseService(), conversation = createConversationClient(), now = () => Date.now() } = {}) {
   const router = express.Router();
 
   // Limites por conversa (as chamadas do Ultimate saem de poucos IPs do Zendesk,
@@ -193,11 +208,61 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
 
     const sel = input.selection(prepared, body);
     if (sel.reason.handoff) throw new ReverseError("HANDOFF_REQUIRED", { field: "items[0].reason" });
-    if (sel.reason.has_image) throw new ReverseError("PHOTO_UNAVAILABLE");
+    if (sel.reason.has_image && !service.features(flow).photos) throw new ReverseError("PHOTO_UNAVAILABLE");
 
     const address = input.address(body);
     const identity = { order_number: body.order_number, customer_identifier: body.customer_identifier };
     return { prepared, sel, address, identity, base: { ...identity, type: sel.type, items: sel.items } };
+  }
+
+  // ---------- Fotos (motivos com has_image) ----------
+
+  function signPhotoToken(flow) {
+    return signData("botphoto", { c: flow.conversationId, t: now() }, PHOTO_TOKEN_TTL_S, now());
+  }
+
+  // Momento em que as fotos foram pedidas: só imagens enviadas depois contam
+  function readPhotoToken(flow, body) {
+    const data = verifyData("botphoto", typeof body.photo_token === "string" ? body.photo_token : "", now());
+    if (!data || data.c !== flow.conversationId || typeof data.t !== "number") throw new ReverseError("INVALID_INPUT", { field: "photo_token" });
+    return data.t - PHOTO_SINCE_MARGIN_MS;
+  }
+
+  // Imagens do cliente na conversa desde o pedido (as 10 mais recentes)
+  async function customerImages(flow, body) {
+    const sinceMs = readPhotoToken(flow, body);
+    let images;
+    try {
+      images = await conversation.listCustomerImages(flow.conversationId, { sinceMs });
+    } catch (error) {
+      console.error(`Bot Troca/Devolução: falha ao listar imagens da conversa (${error.code || error.response?.status || "erro"})`);
+      throw new ReverseError("PHOTO_UPLOAD_FAILED");
+    }
+    return images.slice(-MAX_PER_ITEM);
+  }
+
+  // Baixa e confere as imagens (JPEG, PNG ou WebP pela assinatura do arquivo)
+  async function downloadImages(images) {
+    const photos = [];
+    let total = 0;
+    for (const image of images) {
+      let buffer;
+      try {
+        buffer = await conversation.downloadMedia(image.mediaUrl);
+      } catch (error) {
+        const status = error.response?.status;
+        console.error(`Bot Troca/Devolução: falha ao baixar imagem da conversa (${error.code || status || "erro"})`);
+        if (error.code === "ERR_BAD_RESPONSE" || /maxContentLength/i.test(error.message || "")) throw new ReverseError("PHOTO_TOO_LARGE", { field: "photos" });
+        throw new ReverseError("PHOTO_UPLOAD_FAILED");
+      }
+      const mime = detectImageType(buffer);
+      if (!mime) continue;
+      total += buffer.length;
+      if (total > MAX_TOTAL_PHOTO_BYTES) throw new ReverseError("PHOTO_TOO_LARGE", { field: "photos" });
+      photos.push({ buffer, mime });
+    }
+    if (photos.length === 0) throw new ReverseError("PHOTO_INVALID", { field: "photos" });
+    return photos;
   }
 
   // ---------- 1. Identificar o pedido ----------
@@ -286,10 +351,21 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
       sub_reasons_text: subs.length ? f.subReasonsText(subs) : "",
       requires_comment: reason.has_comment === true,
     };
-    // Fora do prazo e motivos com foto vão para atendente (fotos entram numa próxima versão)
+    // Fora do prazo vai para atendente; motivo com foto pede a foto (ou atendente, se as fotos estiverem desligadas)
     if (result.goes_to_agent) return { ...result, next: "handoff", handoff_reason: "REASON", message: BOT_MESSAGES.HANDOFF_REQUIRED };
-    if (result.requires_photo) return { ...result, next: "handoff", handoff_reason: "PHOTO_REQUIRED", message: BOT_MESSAGES.PHOTO_REQUIRED };
+    if (result.requires_photo) {
+      if (!service.features(flow).photos) return { ...result, next: "handoff", handoff_reason: "PHOTO_REQUIRED", message: BOT_MESSAGES.PHOTO_UNAVAILABLE };
+      // photo_token marca o momento do pedido: guardar e repassar nas próximas chamadas
+      return { ...result, next: "photos", photo_text: reason.image_text || DEFAULT_PHOTO_TEXT, photo_token: signPhotoToken(flow) };
+    }
     return result;
+  });
+
+  // ---------- 3b. Conferir as fotos recebidas ----------
+  handle("photos", async (flow, body) => {
+    const images = await customerImages(flow, body);
+    if (images.length === 0) throw new ReverseError("PHOTO_REQUIRED", { field: "photos" });
+    return { photos_count: images.length, max_photos: MAX_PER_ITEM };
   });
 
   // ---------- 4. Vale-compras (só devolução) ----------
@@ -345,7 +421,8 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
     const kind = sel.type;
 
     // Mesmas validações do envio, antes de mostrar o resumo
-    v.validateSelection(sel.items, prepared, { type: kind });
+    const needsPhotos = sel.reason.has_image === true;
+    v.validateSelection(sel.items, prepared, { type: kind, imageUrlsBySku: needsPhotos ? { [sel.orderItem.sku]: ["pending"] } : {} });
     const addressConfirmed = input.yesNo(body.address_confirmed) === true;
     v.resolveAddress(address, prepared.address_step);
 
@@ -376,7 +453,15 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
     const identifier = v.normalizeCustomerIdentifier(body.customer_identifier)?.value || "";
     const hash = decisionHash([flow.conversationId, orderNumber, identifier, kind, sel.items, address, retention, paymentBill, option ? option.name : null]);
 
-    return { decision, option, retention, closesInCredit, paymentBill, addressConfirmed, orderNumber, hash };
+    // Fotos: com photo_resume (nova tentativa), o serviço reaproveita as já enviadas
+    let images = [];
+    const photoResume = typeof body.photo_resume === "string" && body.photo_resume ? body.photo_resume : null;
+    if (needsPhotos && !photoResume) {
+      images = await customerImages(flow, body);
+      if (images.length === 0) throw new ReverseError("PHOTO_REQUIRED", { field: "photos" });
+    }
+
+    return { decision, option, retention, closesInCredit, paymentBill, addressConfirmed, orderNumber, hash, needsPhotos, images, photoResume };
   }
 
   // ---------- 6. Resumo para o cliente confirmar ----------
@@ -401,6 +486,7 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
         retention: final.retention,
         closesInCredit: final.closesInCredit,
         paymentBill: final.paymentBill,
+        photosCount: final.needsPhotos ? final.images.length || null : null,
       }),
       // Repassar no submit, sem alterar
       confirmation_token: token,
@@ -425,7 +511,12 @@ function createBotRouter({ service = createReverseService(), now = () => Date.no
       if (paymentBill) submitBody.payment_bill = paymentBill;
       if (data.o) submitBody.shipping_option_token = data.o;
 
-      const result = await service.submit(flow, submitBody);
+      // Fotos baixadas só agora, depois da confirmação; o upload e o ticket ficam com o serviço
+      const photosByIndex = {};
+      if (final.photoResume) submitBody.photo_resume = final.photoResume;
+      else if (final.needsPhotos) photosByIndex[0] = await downloadImages(final.images);
+
+      const result = await service.submit(flow, submitBody, { photosByIndex });
       const retentionAccepted = retention?.accepted === true;
       const shipping = result.shipping || {};
 

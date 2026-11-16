@@ -45,18 +45,18 @@ function fakeConversation() {
   };
 }
 
-async function start(t, handlers, { env = {} } = {}) {
+async function start(t, handlers, { env = {}, storage = null, botConversation = null } = {}) {
   t.after(useFakeEnv({ BOT_API_SECRET: SECRET, ...env }));
   setSink(() => {});
   t.after(() => setSink(null));
   const troque = fakeTroque(handlers);
   const conversation = fakeConversation();
-  const storage = { isEnabled: () => false, store: async () => ({}), addNote: async () => {} };
+  storage = storage || { isEnabled: () => false, store: async () => ({}), addNote: async () => {} };
   const service = createReverseService({ troque, conversation, storage });
 
   const app = express();
   app.use(express.json());
-  app.use(createBotRouter({ service }));
+  app.use(createBotRouter({ service, conversation: botConversation || fakeConversation() }));
   app.use(reverseErrorHandler);
   const server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
@@ -306,4 +306,139 @@ test("campos do serviço viram os campos que o bot envia", () => {
   assert.equal(botField("payment_bill.pix_type"), "pix_type");
   assert.equal(botField("payment_bill"), "pix_key");
   assert.equal(botField("retention"), "retention_accepted");
+});
+
+// ---------- Fotos ----------
+
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(20, 1)]);
+
+function photoStorage() {
+  const stored = [];
+  const notes = [];
+  return {
+    stored,
+    notes,
+    isEnabled: () => true,
+    store: async (input) => {
+      stored.push(input);
+      return { ticketId: 77, urlsBySku: { "SKU-1": input.photosBySku["SKU-1"].map((_, i) => `https://exemplo.zendesk.com/anexo-${i + 1}.jpg`) } };
+    },
+    addNote: async (ticketId, body) => notes.push({ ticketId, body }),
+  };
+}
+
+// Conversa falsa com imagens do cliente; "images" pode mudar durante o teste
+function photoConversation(images) {
+  const downloads = [];
+  return {
+    images,
+    downloads,
+    listCustomerImages: async (conversationId, { sinceMs }) => images.filter((i) => i.receivedAt >= sinceMs),
+    downloadMedia: async (url) => {
+      downloads.push(url);
+      return url.endsWith(".txt") ? Buffer.from("nao e imagem nenhuma") : JPEG;
+    },
+  };
+}
+
+const DEFECT = { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2, sub_reason_option: 1, comment: "Descolou a sola", shipping_option: 1 };
+
+test("motivo com foto: pede a foto, confere, resume e envia com ticket", async (t) => {
+  const storage = photoStorage();
+  const images = [];
+  const botConversation = photoConversation(images);
+  const api = await start(t, { prepare_reverse_order: preparedOrder(), quote_return_shipping: SHIPPING, create_reverse_order: createdReverse() }, { storage, botConversation });
+
+  const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
+  assert.equal(detail.body.next, "photos");
+  assert.equal(typeof detail.body.photo_token, "string");
+  assert.match(detail.body.photo_text, /fotos do produto/);
+  const withToken = { ...DEFECT, photo_token: detail.body.photo_token };
+
+  // Ainda sem foto
+  const none = await api.post("photos", withToken);
+  assert.equal(none.body.ok, false);
+  assert.equal(none.body.code, "PHOTO_REQUIRED");
+  assert.equal(none.body.next, "fix_input");
+  assert.equal(none.body.field, "photos");
+
+  // Imagem antiga (antes do pedido) não conta
+  images.push({ id: "velha", mediaUrl: "https://exemplo.zendesk.com/velha.jpg", receivedAt: Date.now() - 10 * 60 * 1000 });
+  images.push({ id: "m1", mediaUrl: "https://exemplo.zendesk.com/m1.jpg", receivedAt: Date.now() });
+  images.push({ id: "m2", mediaUrl: "https://exemplo.zendesk.com/m2.jpg", receivedAt: Date.now() });
+  const found = await api.post("photos", withToken);
+  assert.equal(found.body.ok, true);
+  assert.equal(found.body.photos_count, 2);
+
+  const summary = await api.post("summary", withToken);
+  assert.equal(summary.body.ok, true);
+  assert.match(summary.body.summary_text, /Fotos: 2/);
+  // Nada baixado nem enviado antes da confirmação
+  assert.equal(botConversation.downloads.length, 0);
+  assert.equal(storage.stored.length, 0);
+
+  const done = await api.post("submit", { ...withToken, confirmation_token: summary.body.confirmation_token });
+  assert.equal(done.body.ok, true);
+  assert.deepEqual(botConversation.downloads, ["https://exemplo.zendesk.com/m1.jpg", "https://exemplo.zendesk.com/m2.jpg"]);
+  assert.equal(storage.stored.length, 1);
+  assert.equal(storage.stored[0].photosBySku["SKU-1"].length, 2);
+  assert.deepEqual(storage.stored[0].extraTags, ["canal_whatsapp"]);
+  assert.match(storage.stored[0].ticketBody, /pelo bot \(WhatsApp\)/);
+
+  const create = api.troque.calls.find((c) => c.name === "create_reverse_order");
+  assert.deepEqual(create.args.items[0].reason.image_url, ["https://exemplo.zendesk.com/anexo-1.jpg", "https://exemplo.zendesk.com/anexo-2.jpg"]);
+});
+
+test("pedido de fotos inválido ou de outra conversa é recusado", async (t) => {
+  const api = await start(t, { prepare_reverse_order: preparedOrder() }, { storage: photoStorage(), botConversation: photoConversation([]) });
+  const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
+
+  const missing = await api.post("photos", DEFECT);
+  assert.equal(missing.body.field, "photo_token");
+
+  const other = await api.post("photos", { ...DEFECT, conversation_id: "outra-conversa", photo_token: detail.body.photo_token });
+  assert.equal(other.body.field, "photo_token");
+});
+
+test("arquivo que não é imagem é recusado no envio", async (t) => {
+  const storage = photoStorage();
+  const botConversation = photoConversation([{ id: "x", mediaUrl: "https://exemplo.zendesk.com/x.txt", receivedAt: Date.now() }]);
+  const api = await start(t, { prepare_reverse_order: preparedOrder(), quote_return_shipping: SHIPPING }, { storage, botConversation });
+  const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
+  const body = { ...DEFECT, photo_token: detail.body.photo_token };
+  const summary = await api.post("summary", body);
+
+  const res = await api.post("submit", { ...body, confirmation_token: summary.body.confirmation_token });
+  assert.equal(res.body.code, "PHOTO_INVALID");
+  assert.equal(res.body.next, "fix_input");
+  assert.equal(storage.stored.length, 0);
+});
+
+test("falha na criação devolve photo_resume; a nova tentativa não reenvia fotos", async (t) => {
+  const storage = photoStorage();
+  const botConversation = photoConversation([{ id: "m1", mediaUrl: "https://exemplo.zendesk.com/m1.jpg", receivedAt: Date.now() }]);
+  let fail = true;
+  const api = await start(
+    t,
+    {
+      prepare_reverse_order: preparedOrder(),
+      quote_return_shipping: SHIPPING,
+      create_reverse_order: () => (fail ? new TroqueError("VALIDATION_FAILED") : createdReverse()),
+    },
+    { storage, botConversation },
+  );
+  const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
+  const body = { ...DEFECT, photo_token: detail.body.photo_token };
+  const summary = await api.post("summary", body);
+
+  const first = await api.post("submit", { ...body, confirmation_token: summary.body.confirmation_token });
+  assert.equal(first.body.ok, false);
+  assert.equal(typeof first.body.photo_resume, "string");
+  assert.equal(storage.stored.length, 1);
+
+  fail = false;
+  const retry = await api.post("submit", { ...body, confirmation_token: summary.body.confirmation_token, photo_resume: first.body.photo_resume });
+  assert.equal(retry.body.ok, true);
+  assert.equal(storage.stored.length, 1);
+  assert.equal(botConversation.downloads.length, 1);
 });
