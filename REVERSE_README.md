@@ -76,6 +76,7 @@ curl -X POST https://<app>.onrender.com/api/send-webview \
 | `FLOW_SESSION_TTL_MINUTES` | Validade da sessão (padrão 60) |
 | `FLOW_HASH_SALT` | Sal do hash do número do pedido no rastreamento (não trocar depois de em uso) |
 | `WEBVIEW_API_SECRET` | Protege o `send-webview`. Cadastre o header no bot antes de definir |
+| `BOT_API_SECRET` | Liga e protege a API do bot (`/api/bot/reverse/*`). Vazio = API desligada |
 | `TRUST_PROXY_HOPS` | Proxies na frente do app (padrão 1, o do Render), para os limites por IP |
 
 ## Endpoints
@@ -95,6 +96,33 @@ curl -X POST https://<app>.onrender.com/api/send-webview \
 
 - **Sessão:** todos os `POST` exigem `X-Flow-Token`. O `sendBeacon` de saída manda `_token` no corpo.
 - **Erros:** vêm como `{success: false, code, error, action}`. `error` é o texto para o cliente; `action` diz o que a tela oferece: `retry`, `fix_input`, `track`, `refresh_retention`, `requote`, `retry_without_address`, `handoff` ou `close`.
+
+## API do bot (WhatsApp)
+
+Para o agente de IA do Zendesk montar o fluxo sem webview. Usa o mesmo serviço do webview (mesmas regras), mas responde em JSON plano para o Ultimate mapear em variáveis.
+
+- **Autenticação:** header `X-Api-Secret: <BOT_API_SECRET>`. Sem a variável, a API responde 503.
+- **Sempre HTTP 200**, com `{ok, next, code?, field?, message?}`. O fluxo decide pelo `next`: `continue`, `retry`, `fix_input` (perguntar de novo o `field`), `handoff` (com `handoff_reason`), `track`, `quote`, `retention`, `summary`, `address` ou `close`. Só 401 (segredo errado), 503 (API desligada) e 400 (JSON inválido) fogem disso.
+- **Nada fica no servidor:** cada chamada leva o corpo base mais as escolhas acumuladas.
+- **Escolhas por número:** `item_option`, `reason_option`, `sub_reason_option`, `shipping_option` e `pix_type` aceitam `2` ou `"2"` (posição na lista numerada da etapa anterior).
+- **Nada é postado na conversa:** quem responde ao cliente é o bot, com o `message` ou os campos `*_text`.
+- **Limites desta versão:** um produto por solicitação; motivo com foto vai para atendente; reembolso só por PIX; pedido sem CPF ou e-mail no cadastro vai para atendente.
+
+Corpo base de todas as rotas: `conversation_id`, `store` (`mizuno`, `olympikus`, `underarmour`), `order_number`, `customer_identifier` (CPF, CNPJ ou e-mail).
+
+| Rota `POST /api/bot/reverse/...` | Corpo além do base | Principais campos da resposta |
+| --- | --- | --- |
+| `lookup` | nada | `eligible`, `first_name`, `items_count`, `items_text`, `item_N_name`, `existing_count`, `existing_text`, `address_mode` (`none`, `confirm`, `ask_full_address`), `address_text`, `is_bank_transfer`, `pix_types_text` |
+| `reasons` | `type` (`troca`/`devolução` ou `exchange`/`refund`), `item_option` | `reasons_count`, `reasons_text`, `item_max_quantity` |
+| `reason_detail` | + `reason_option` | `goes_to_agent`, `requires_photo`, `has_sub_reasons`, `sub_reasons_text`, `requires_comment` |
+| `retention` | + `sub_reason_option`, `comment`, `quantity` | `available`, `mode`, `must_choose`, `offer_text`, `has_better_offer`, `better_offer_text`, `needs_pix_if_declined` |
+| `quote` | + endereço (abaixo), `retention_accepted` | `options_count`, `options_text` |
+| `summary` | + `shipping_option`, `retention_level`, `pix_type`, `pix_key`, `address_confirmed` | `summary_text`, `confirmation_token` |
+| `submit` | tudo do `summary` + `confirmation_token` | `reverse_order_id`, `message`, `posting_code`, `posting_due_date`, `carrier`, `tracking_url`, `replayed` |
+| `track` | nada | `reverses_count`, `track_text` |
+
+- **Endereço:** se `address_mode` for `confirm`, mostrar `address_text` e perguntar. Se o cliente confirmar, envie `address_confirmed: "sim"`. Se não (ou em `ask_full_address`), envie `address_zipcode`, `address_street`, `address_number`, `address_neighborhood`, `address_city`, `address_state` e, opcionalmente, `address_complement`.
+- **Confirmação:** o `submit` só cria com o `confirmation_token` do `summary`. Se qualquer escolha mudou depois do resumo, ele responde `CONFIRMATION_REQUIRED` com `next: "summary"`. Repetir o `submit` devolve a mesma solicitação (`replayed: true`).
 
 ## Regras que não podem mudar
 

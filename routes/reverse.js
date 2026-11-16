@@ -82,9 +82,12 @@ function sendError(res, error, flow, endpoint) {
 // Erros antes das rotas (ex.: JSON malformado no corpo) nos endpoints do fluxo:
 // resposta curta, sem registrar o corpo, que pode ter dados do cliente
 function reverseErrorHandler(error, req, res, next) {
-  if (!/^\/api\/(reverse|flow)\//.test(req.path)) return next(error);
+  if (!/^\/api\/(reverse|flow|bot)\//.test(req.path)) return next(error);
   if (res.headersSent) return next(error);
   const status = error.type === "entity.too.large" ? 413 : 400;
+  if (req.path.startsWith("/api/bot/")) {
+    return res.status(status).json({ ok: false, next: "fix_input", code: "INVALID_INPUT", message: "Não foi possível ler os dados enviados (confira o JSON do corpo)." });
+  }
   return res.status(status).json({ success: false, code: "INVALID_INPUT", error: "Não foi possível ler os dados enviados. Tente novamente.", action: "retry" });
 }
 

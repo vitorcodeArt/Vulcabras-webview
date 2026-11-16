@@ -4,6 +4,7 @@ const axios = require("axios");
 require("dotenv").config();
 
 const reverse = require("./routes/reverse");
+const { createBotRouter } = require("./routes/bot");
 const { logBrandStatus } = require("./lib/brands");
 const { isSessionConfigured } = require("./lib/session");
 const { requireApiSecret, isApiSecretConfigured } = require("./lib/apiAuth");
@@ -89,6 +90,8 @@ app.get("/reverse", (req, res) => {
 });
 
 app.use(reverse.createReverseRouter());
+// API do bot (WhatsApp): mesmas regras, JSON plano para o Ultimate
+app.use(createBotRouter());
 app.use(reverse.reverseErrorHandler);
 
 // ======================================================
