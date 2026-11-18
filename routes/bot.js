@@ -455,7 +455,9 @@ function createBotRouter({ service = createReverseService(), conversation = crea
 
     // Fotos: com photo_resume (nova tentativa), o serviço reaproveita as já enviadas
     let images = [];
-    const photoResume = typeof body.photo_resume === "string" && body.photo_resume ? body.photo_resume : null;
+    // Só vale um photo_resume assinado e desta conversa; lixo como "null" ou "Ausente" é ignorado
+    const resumeData = typeof body.photo_resume === "string" && body.photo_resume ? verifyData("photos", body.photo_resume, now()) : null;
+    const photoResume = resumeData && resumeData.c === flow.conversationId ? body.photo_resume : null;
     if (needsPhotos && !photoResume) {
       images = await customerImages(flow, body);
       if (images.length === 0) throw new ReverseError("PHOTO_REQUIRED", { field: "photos" });

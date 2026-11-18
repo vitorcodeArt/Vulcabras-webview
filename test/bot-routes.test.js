@@ -389,6 +389,28 @@ test("motivo com foto: pede a foto, confere, resume e envia com ticket", async (
   assert.deepEqual(create.args.items[0].reason.image_url, ["https://exemplo.zendesk.com/anexo-1.jpg", "https://exemplo.zendesk.com/anexo-2.jpg"]);
 });
 
+test("photo_resume lixo (\"null\", \"Ausente\") é ignorado e as fotos são buscadas", async (t) => {
+  const storage = photoStorage();
+  const images = [{ id: "m1", mediaUrl: "https://exemplo.zendesk.com/m1.jpg", receivedAt: Date.now() + 1000 }];
+  const botConversation = photoConversation(images);
+  const api = await start(t, { prepare_reverse_order: preparedOrder(), quote_return_shipping: SHIPPING, create_reverse_order: createdReverse() }, { storage, botConversation });
+
+  const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
+  const withToken = { ...DEFECT, photo_token: detail.body.photo_token };
+
+  for (const junk of ["null", "Ausente"]) {
+    const summary = await api.post("summary", { ...withToken, photo_resume: junk });
+    assert.equal(summary.body.ok, true, junk);
+    assert.match(summary.body.summary_text, /Fotos: 1/);
+  }
+
+  const summary = await api.post("summary", { ...withToken, photo_resume: "null" });
+  const done = await api.post("submit", { ...withToken, photo_resume: "null", confirmation_token: summary.body.confirmation_token });
+  assert.equal(done.body.ok, true);
+  assert.equal(storage.stored.length, 1);
+  assert.equal(storage.stored[0].photosBySku["SKU-1"].length, 1);
+});
+
 test("pedido de fotos inválido ou de outra conversa é recusado", async (t) => {
   const api = await start(t, { prepare_reverse_order: preparedOrder() }, { storage: photoStorage(), botConversation: photoConversation([]) });
   const detail = await api.post("reason_detail", { ...BASE_BODY, type: "troca", item_option: 1, reason_option: 2 });
