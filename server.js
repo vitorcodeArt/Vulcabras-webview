@@ -5,6 +5,7 @@ require("dotenv").config();
 
 const reverse = require("./routes/reverse");
 const { createBotRouter } = require("./routes/bot");
+const { createHealthRouter } = require("./routes/health");
 const { logBrandStatus } = require("./lib/brands");
 const { isSessionConfigured } = require("./lib/session");
 const { requireApiSecret, isApiSecretConfigured } = require("./lib/apiAuth");
@@ -47,6 +48,9 @@ app.get("/health", (req, res) => {
     status: "online",
   });
 });
+
+// Saúde do banco de acompanhamento (acorda o Render e mantém o Supabase ativo)
+app.use(createHealthRouter());
 
 app.get("/", (req, res) => {
   res.json({

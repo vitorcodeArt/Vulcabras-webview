@@ -175,6 +175,35 @@ Cada evento é uma linha JSON no log com `"kind":"flow_event"`. Para ver uma jor
   - o número do pedido vai só como hash (`order_hash`);
   - chaves de `meta` com nome de dado pessoal (cpf, email, nome, endereço, pix, banco, comentário, token...) são descartadas.
 
+## Banco de acompanhamento
+
+O acompanhamento das webviews é gravado num Postgres do Supabase (cliente `pg`, sem o SDK do Supabase). Sem `DATABASE_URL`, o app funciona igual e o acompanhamento fica só no console.
+
+- **`DATABASE_URL`:** string do pooler em modo transação (porta 6543). Só em variável de ambiente (Render e `.env` local), nunca em arquivo versionado.
+- **Esquema:** vive em `db/migrations/*.sql`. Não há tabela criada fora desses arquivos.
+- **Aplicar as migrações:** `npm run migrate`. Aplica em ordem alfabética só o que falta, cada arquivo numa transação, e registra em `schema_migrations`. Pode rodar de novo sem efeito. Sai com código 1 em erro e nunca imprime a string de conexão.
+- **Saúde:** `GET /health/db` responde `{ "ok": true, "ms": 12 }` ou 503 `{ "ok": false }`, sem detalhes do erro e sem autenticação. O resultado é reaproveitado por 5 s.
+- **Keepalive:** o workflow `.github/workflows/keepalive.yml` chama essa rota todo dia (e sob demanda) para acordar o Render e manter o Supabase ativo. Crie o segredo `HEALTH_URL` (`https://<app>.onrender.com/health/db`) em *Settings > Secrets and variables > Actions*. O GitHub desativa workflows agendados depois de 60 dias sem atividade no repositório: se isso acontecer, reative na aba *Actions*.
+- **Log:** só o código do erro. Parâmetros, mensagens do banco e a string de conexão nunca são impressos.
+- **Conexão:** `ssl: { rejectUnauthorized: false }`, ou seja, a conexão é cifrada mas o certificado do servidor não é verificado.
+
+### Pedido de exclusão (LGPD)
+
+Para apagar os dados de acompanhamento de uma conversa a pedido do titular:
+
+```bash
+DATABASE_URL="<string do pooler>" npm run forget -- <conversationId>
+```
+
+(ou com `DATABASE_URL` no `.env` local). O script chama `select forget_conversation($1)` e imprime só `ok`; em erro, imprime só o código e sai com código 1. O ID da conversa não vai para arquivo nem para o log do app (ele fica no histórico do seu terminal, porque você o digitou). Confirme a exclusão com o titular e registre o atendimento no canal de privacidade, fora deste repositório.
+
+### Retenção de 12 meses
+
+Os dados de acompanhamento são mantidos por 12 meses. A limpeza é a função `purge_old_flow_data()` do banco, de duas formas:
+
+- **Automática:** agendada no próprio Supabase com `pg_cron` (o agendamento é feito no banco, não neste repositório).
+- **Manual:** `select purge_old_flow_data();` no SQL Editor do Supabase.
+
 ## Operação
 
 - **Ligar ou desligar fotos:** `REVERSE_PHOTOS_ENABLED`.
