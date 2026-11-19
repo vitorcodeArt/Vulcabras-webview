@@ -6,9 +6,12 @@ require("dotenv").config();
 const reverse = require("./routes/reverse");
 const { createBotRouter } = require("./routes/bot");
 const { createHealthRouter } = require("./routes/health");
+const { createSendWebviewRouter } = require("./routes/sendWebview");
+const { createAnalyticsRouter } = require("./routes/analytics");
 const { logBrandStatus } = require("./lib/brands");
+const { installTrackingDb } = require("./lib/tracking-db");
 const { isSessionConfigured } = require("./lib/session");
-const { requireApiSecret, isApiSecretConfigured } = require("./lib/apiAuth");
+const { isApiSecretConfigured } = require("./lib/apiAuth");
 
 const app = express();
 
@@ -19,17 +22,6 @@ const PORT = process.env.PORT || 3000;
 app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS || 1));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// ======================================================
-// CONFIGURAÇÕES
-// ======================================================
-
-const ZENDESK_SUBDOMAIN = process.env.ZENDESK_SUBDOMAIN;
-const ZENDESK_APP_ID = process.env.ZENDESK_APP_ID;
-const ZENDESK_KEY_ID = process.env.ZENDESK_KEY_ID;
-const ZENDESK_SECRET = process.env.ZENDESK_SECRET;
-
-const WEBVIEW_URL = process.env.WEBVIEW_URL || `http://localhost:${PORT}/webview`;
 
 // ======================================================
 // FRONTEND
@@ -144,107 +136,11 @@ app.get("/api/tracking", (req, res) => {
 // ======================================================
 // ENVIAR WEBVIEW PARA UMA CONVERSA (DINÂMICO)
 // ======================================================
+// A rota fica em routes/sendWebview.js (as lojas do catálogo vêm daqui, definidas abaixo)
 
-// Exige WEBVIEW_API_SECRET quando a variável estiver definida (ver lib/apiAuth.js)
-app.post("/api/send-webview", requireApiSecret(), async (req, res) => {
-  try {
-    const { conversationId, type = "tracking", store = "mizuno", customText, buttonText } = req.body;
-
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: "conversationId é obrigatório",
-      });
-    }
-
-    if (!ZENDESK_SUBDOMAIN || !ZENDESK_APP_ID || !ZENDESK_KEY_ID || !ZENDESK_SECRET) {
-      return res.status(500).json({
-        success: false,
-        error: "Credenciais do Zendesk não configuradas",
-      });
-    }
-
-    const isCatalog = type === "catalog";
-    const isReverse = type === "reverse";
-    const storeKey = String(store || "mizuno").toLowerCase();
-
-    // valida a loja apenas quando o fluxo for de catálogo
-    if (isCatalog && !VTEX_STORES[storeKey]) {
-      return res.status(400).json({
-        success: false,
-        error: `Loja "${storeKey}" inválida. Opções: ${Object.keys(VTEX_STORES).join(", ")}`,
-      });
-    }
-
-    const baseUrl = process.env.WEBVIEW_URL ? process.env.WEBVIEW_URL.replace(/\/(webview|catalog|reverse)\/?$/, "") : `http://localhost:${PORT}`;
-
-    // Troca/devolução: URL com sessão assinada (conversationId, marca e expiração)
-    const reverseWebview = isReverse ? reverse.buildReverseWebview({ baseUrl, conversationId, store: storeKey, customText, buttonText }) : null;
-
-    if (reverseWebview && !reverseWebview.ok) {
-      return res.status(reverseWebview.status).json({
-        success: false,
-        error: reverseWebview.error,
-      });
-    }
-
-    const targetPath = isCatalog ? "catalog" : "webview";
-
-    const params = new URLSearchParams({ conversationId });
-    if (isCatalog) params.set("store", storeKey);
-
-    const uri = isReverse ? reverseWebview.uri : `${baseUrl}/${targetPath}?${params.toString()}`;
-
-    const storeLabel = isCatalog ? VTEX_STORES[storeKey].label : isReverse ? reverseWebview.label : null;
-
-    const messageText = isReverse ? reverseWebview.text : customText || (isCatalog ? `Confira o nosso catálogo ${storeLabel}:` : "Consulte o rastreamento do seu pedido:");
-    const actionButtonText = isReverse ? reverseWebview.buttonText : buttonText || (isCatalog ? "Ver Catálogo" : "Ver rastreamento");
-
-    const payload = {
-      author: { type: "business" },
-      content: {
-        type: "text",
-        text: messageText,
-        actions: [
-          {
-            type: "webview",
-            text: actionButtonText,
-            size: "tall",
-            uri,
-            fallback: uri,
-          },
-        ],
-      },
-    };
-
-    const response = await axios.post(
-      `https://${ZENDESK_SUBDOMAIN}.zendesk.com/sc/v2/apps/${ZENDESK_APP_ID}/conversations/${conversationId}/messages`,
-      payload,
-      {
-        auth: { username: ZENDESK_KEY_ID, password: ZENDESK_SECRET },
-        headers: { "Content-Type": "application/json" },
-      }
-    );
-
-    // Na troca/devolução, a resposta do Zendesk contém a URL com o token da sessão:
-    // devolver só o ID da mensagem, para o token não sair da conversa.
-    const responseData = isReverse ? { messageId: response.data?.messages?.[0]?.id || null } : response.data;
-
-    res.json({
-      success: true,
-      message: `Webview (${isCatalog ? `catálogo ${storeLabel}` : isReverse ? `troca e devolução ${storeLabel}` : "rastreamento"}) enviada com sucesso`,
-      data: responseData,
-    });
-  } catch (error) {
-    console.error("Erro ao enviar Webview:");
-    console.error(error.response?.data || error.message);
-
-    res.status(error.response?.status || 500).json({
-      success: false,
-      error: error.response?.data || error.message,
-    });
-  }
-});
+app.use(createSendWebviewRouter({ getVtexStores: () => VTEX_STORES }));
+// API de consulta do acompanhamento (app da Zendesk), com Bearer ANALYTICS_API_SECRET
+app.use("/api/analytics", createAnalyticsRouter());
 
 // ======================================================
 // CATÁLOGO DE PRODUTOS (VTEX)
@@ -617,6 +513,8 @@ app.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor iniciado na porta ${PORT}`);
 
   logBrandStatus();
+  // Eventos da jornada também no Postgres (só com DATABASE_URL)
+  installTrackingDb();
   if (!isSessionConfigured()) {
     console.warn("Troca/Devolução: FLOW_SESSION_SECRET ausente ou curto; o fluxo /reverse ficará indisponível");
   }

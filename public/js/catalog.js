@@ -100,6 +100,11 @@ const CATEGORY_ICONS = {
   "Loja Vulcabras": "store",
 };
 
+// Rastreamento (public/js/shared/tracking.js). Sem o script ou sem token, não faz nada.
+function trackEvent(event, data) {
+  if (window.FlowTracking) window.FlowTracking.track(event, data);
+}
+
 // Utilitário para atualizar ícones do Lucide
 function refreshIcons() {
   if (window.lucide && typeof window.lucide.createIcons === "function") {
@@ -143,6 +148,7 @@ function applyStoreBranding() {
 
 function setView(viewName) {
   state.currentView = viewName;
+  trackEvent("step_viewed", { step: viewName });
 
   dom.categoriesSection?.classList.add("hidden");
   dom.productsSection?.classList.add("hidden");
@@ -184,6 +190,7 @@ document.addEventListener("DOMContentLoaded", () => {
   applyStoreBranding();
   setupNavigationEvents();
   refreshIcons();
+  trackEvent("webview_opened", { step: "categories" });
   loadCategories();
 });
 
@@ -258,6 +265,8 @@ function handleAddToCart() {
   }
 
   hideVariationAlert();
+  // Antes do window.open: a página pode ser fechada logo depois do clique
+  trackEvent("add_to_cart_clicked", { meta: { sku: String(state.selectedVariation.sku || ""), product_id: String(state.selectedProduct || "").split(",")[0] } });
   window.open(state.selectedVariation.addToCartLink, "_blank", "noopener,noreferrer");
 }
 
@@ -350,6 +359,7 @@ function selectCategory(btn) {
     name: btn.dataset.categoryName,
   };
   state.searchQuery = null;
+  trackEvent("category_selected", { step: "categories", meta: { category: state.selectedCategory.name } });
 
   loadProducts(state.selectedCategory.categoryId);
 }
@@ -408,6 +418,7 @@ async function searchProducts(query) {
     state.selectedCategory = null;
     state.searchQuery = query;
     state.products = data.products || [];
+    trackEvent("search_performed", { step: "categories", meta: window.FlowTracking ? window.FlowTracking.searchMeta(query, state.products.length) : undefined });
     renderProducts(state.products);
     setView("products");
   } catch (error) {
@@ -533,6 +544,7 @@ async function viewProductDetails(btn) {
 
     state.productDetails = data;
     state.selectedProduct = productIds;
+    trackEvent("product_viewed", { step: "products", meta: { product_id: String(productIds || "").split(",")[0], product_title: String(data.name || data.productName || "").slice(0, 120) } });
     renderProductDetails(data);
     setView("details");
   } catch (error) {
@@ -790,6 +802,7 @@ function renderVariations(variations) {
 
       if (variation) {
         state.selectedVariation = variation;
+        trackEvent("variation_selected", { step: "details", meta: { sku: String(variation.sku || ""), size: String(variation.size || selectedSize), color: String(selectedColor) } });
         if (dom.selectedVariationText) {
           dom.selectedVariationText.textContent = variation.nameComplete || variation.name || `${selectedColor} - ${selectedSize}`;
         }

@@ -295,6 +295,7 @@
       <button id="closeButton" class="close-button" onclick="closeWebview()">Fechar</button>
     </div>
 
+    <script src="/js/shared/tracking.js"></script>
     <script>
       // =====================================================
       // CONVERSATION ID
@@ -305,6 +306,9 @@
       const conversationId = params.get("conversationId");
 
       console.log("conversationId:", conversationId);
+
+      // Rastreamento: só a abertura e o abandono (o token vem no link novo)
+      if (window.FlowTracking) window.FlowTracking.track("webview_opened", { step: "tracking" });
 
       // =====================================================
       // FORMATAR DATA

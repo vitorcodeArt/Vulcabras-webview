@@ -76,6 +76,9 @@ curl -X POST https://<app>.onrender.com/api/send-webview \
 | `FLOW_SESSION_TTL_MINUTES` | Validade da sessão (padrão 60) |
 | `FLOW_HASH_SALT` | Sal do hash do número do pedido no rastreamento (não trocar depois de em uso) |
 | `WEBVIEW_API_SECRET` | Protege o `send-webview`. Cadastre o header no bot antes de definir |
+| `ANALYTICS_API_SECRET` | Liga e protege a API de acompanhamento (`/api/analytics/*`). Vazio = API desligada (503) |
+| `TRACK_SEARCH_TERMS` | `false` deixa de gravar o termo digitado na busca do catálogo (só a contagem). Padrão: ligado |
+| `DATABASE_URL` | Postgres do acompanhamento (pooler, porta 6543). Vazio = eventos só no console |
 | `BOT_API_SECRET` | Liga e protege a API do bot (`/api/bot/reverse/*`). Vazio = API desligada |
 | `BOT_TICKET_TAG` | Tag de canal do ticket com fotos vindo do bot (padrão `canal_whatsapp`) |
 | `TRUST_PROXY_HOPS` | Proxies na frente do app (padrão 1, o do Render), para os limites por IP |
@@ -93,8 +96,19 @@ curl -X POST https://<app>.onrender.com/api/send-webview \
 | `POST /api/reverse/track` | Status das solicitações |
 | `POST /api/reverse/finish` | Mensagem de fim do acompanhamento |
 | `POST /api/reverse/handoff` | Mensagem com o botão "Falar com atendente" |
-| `POST /api/flow/events` | Eventos de rastreamento do navegador |
+| `POST /api/flow/events` | Eventos de rastreamento do navegador (token de qualquer fluxo) |
+| `GET /api/flow/config` | Configuração pública do rastreamento (`trackSearchTerms`) |
+| `GET /api/analytics/health` | API de acompanhamento: saúde do banco |
+| `GET /api/analytics/summary` | Totais, por fluxo, por marca e por dia |
+| `GET /api/analytics/funnel` | Funil por etapa (`flow=reverse\|catalog`) |
+| `GET /api/analytics/sends` | Todo botão enviado e o que aconteceu depois (filtros, busca `q`, cursor) |
+| `GET /api/analytics/sends/:sendId` | Detalhe do envio com os eventos da sessão |
+| `GET /api/analytics/sessions/:sessionId` | Sessão, envio e eventos em ordem |
+| `GET /api/analytics/reports/reverse` | Relatório de troca e devolução |
+| `GET /api/analytics/reports/catalog` | Relatório do catálogo |
+| `GET /api/analytics/export.csv` | CSV (`report=sends\|reverse_sessions\|catalog_products`) |
 
+- **API de acompanhamento:** só `GET`, com `Authorization: Bearer <ANALYTICS_API_SECRET>` (sem CORS; 60 req/min). Formato, filtros e rótulos em [docs/api-contract.md](docs/api-contract.md).
 - **Sessão:** todos os `POST` exigem `X-Flow-Token`. O `sendBeacon` de saída manda `_token` no corpo.
 - **Erros:** vêm como `{success: false, code, error, action}`. `error` é o texto para o cliente; `action` diz o que a tela oferece: `retry`, `fix_input`, `track`, `refresh_retention`, `requote`, `retry_without_address`, `handoff` ou `close`.
 

@@ -15,6 +15,8 @@ test("monta o registro com os campos do modelo", () => {
     ts: "2026-11-11T12:00:00.000Z",
     source: "server",
     session_id: SESSION_ID,
+    send_id: null,
+    flow: null,
     conversation_id: "conv1",
     brand: "mizuno",
     seq: 3,

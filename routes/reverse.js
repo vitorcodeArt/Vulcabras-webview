@@ -6,8 +6,8 @@
 
 const express = require("express");
 const { getBrand, toPublicBrand, BRAND_KEYS } = require("../lib/brands");
-const { createSessionToken, isValidConversationId, requireSession } = require("../lib/session");
-const { ingestClientEvents } = require("../lib/tracking");
+const { createSessionToken, isValidConversationId, requireSession, requireFlow } = require("../lib/session");
+const { ingestClientEvents, trackSearchTerms } = require("../lib/tracking");
 const { createReverseService } = require("../lib/reverse/service");
 const { describeError } = require("../lib/reverse/errors");
 const { parseSubmitPayload } = require("../lib/reverse/photos");
@@ -35,7 +35,7 @@ const SESSION_QUERY_PARAM = "t";
 
 // Monta a URI da webview e os textos da mensagem para type: "reverse".
 // Devolve { ok: true, uri, label, text, buttonText } ou { ok: false, status, error }.
-function buildReverseWebview({ baseUrl, conversationId, store, customText, buttonText }) {
+function buildReverseWebview({ baseUrl, conversationId, store, customText, buttonText, sendId }) {
   if (!isValidConversationId(conversationId)) {
     return { ok: false, status: 400, error: "conversationId inválido" };
   }
@@ -51,7 +51,7 @@ function buildReverseWebview({ baseUrl, conversationId, store, customText, butto
 
   let token;
   try {
-    token = createSessionToken({ conversationId, store: brand.key });
+    token = createSessionToken({ conversationId, store: brand.key, sendId, flow: "reverse" });
   } catch (error) {
     console.error("Troca/Devolução: não foi possível gerar a sessão -", error.message);
     return { ok: false, status: 500, error: "Sessão do fluxo não configurada no servidor" };
@@ -99,7 +99,7 @@ function createReverseRouter({ service = createReverseService() } = {}) {
   router.use(["/api/reverse", "/api/flow"], rateLimit({ name: "ip", windowMs: 5 * MINUTE, max: 300, key: byIp }));
 
   // Confirma a sessão e devolve os dados mínimos para a webview montar a tela
-  router.post("/api/reverse/session", requireSession, limits.session, (req, res) => {
+  router.post("/api/reverse/session", requireSession, requireFlow("reverse"), limits.session, (req, res) => {
     res.json({
       success: true,
       brand: toPublicBrand(req.flow.brand),
@@ -108,10 +108,17 @@ function createReverseRouter({ service = createReverseService() } = {}) {
     });
   });
 
-  // Lote de eventos de rastreamento vindos do navegador (fetch ou sendBeacon)
+  // Lote de eventos de rastreamento vindos do navegador (fetch ou sendBeacon).
+  // Aceita o token de qualquer fluxo (catálogo, rastreamento ou troca e devolução).
   router.post("/api/flow/events", requireSession, limits.events, (req, res) => {
     const result = ingestClientEvents(req.body?.events, req.flow);
     res.status(202).json({ success: true, ...result });
+  });
+
+  // Ajuste público e inofensivo: o navegador só envia o termo da busca se estiver ligado
+  router.get("/api/flow/config", (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ success: true, trackSearchTerms: trackSearchTerms() });
   });
 
   const endpoints = {
@@ -124,7 +131,7 @@ function createReverseRouter({ service = createReverseService() } = {}) {
   };
 
   for (const [path, [handler, limit]] of Object.entries(endpoints)) {
-    router.post(path, requireSession, limit, async (req, res) => {
+    router.post(path, requireSession, requireFlow("reverse"), limit, async (req, res) => {
       try {
         const body = req.body && typeof req.body === "object" ? req.body : {};
         const data = await handler(req.flow, body);
@@ -136,7 +143,7 @@ function createReverseRouter({ service = createReverseService() } = {}) {
   }
 
   // Submit: JSON ou multipart (payload + fotos)
-  router.post("/api/reverse/submit", requireSession, limits.submit, parseSubmitPayload, async (req, res) => {
+  router.post("/api/reverse/submit", requireSession, requireFlow("reverse"), limits.submit, parseSubmitPayload, async (req, res) => {
     try {
       if (req.uploadError) throw req.uploadError;
       const body = req.body && typeof req.body === "object" ? req.body : {};
