@@ -52,8 +52,6 @@ function placeholderImage(width, height) {
 const dom = {
   headerBackBtn: document.getElementById("headerBackBtn"),
   headerTitle: document.getElementById("headerTitle"),
-  headerBrand: document.getElementById("headerBrand"),
-  headerBadge: document.getElementById("headerBadge"),
 
   categoriesSection: document.getElementById("categoriesSection"),
   categoriesContainer: document.getElementById("categoriesContainer"),
@@ -140,6 +138,26 @@ function applyStoreBranding() {
 
   if (dom.headerTitle) dom.headerTitle.textContent = `Catálogo ${storeInfo.label}`;
   if (dom.productBrand) dom.productBrand.textContent = storeInfo.label;
+
+  // Cores, fontes e logo da marca (brand-theme.css e shared/brand.js)
+  if (window.BrandTheme) window.BrandTheme.apply({ key: state.store, label: storeInfo.label });
+}
+
+// Etapas no painel lateral (telas largas): marca a atual e as já visitadas
+const STEPPER_STEPS = [
+  { view: "categories", label: "Categorias" },
+  { view: "products", label: "Produtos" },
+  { view: "details", label: "Detalhe" },
+];
+
+function renderStepper(viewName) {
+  const list = document.getElementById("stepper");
+  if (!list) return;
+  const current = STEPPER_STEPS.findIndex((step) => step.view === viewName);
+  list.innerHTML = STEPPER_STEPS.map((step, i) => {
+    const status = i < current ? "is-done" : i === current ? "is-current" : "";
+    return `<li class="${status}"${i === current ? ' aria-current="step"' : ""}><span class="num">${i + 1}</span>${step.label}</li>`;
+  }).join("");
 }
 
 // ============================================================
@@ -149,6 +167,7 @@ function applyStoreBranding() {
 function setView(viewName) {
   state.currentView = viewName;
   trackEvent("step_viewed", { step: viewName });
+  renderStepper(viewName);
 
   dom.categoriesSection?.classList.add("hidden");
   dom.productsSection?.classList.add("hidden");
@@ -188,6 +207,7 @@ function setView(viewName) {
 
 document.addEventListener("DOMContentLoaded", () => {
   applyStoreBranding();
+  renderStepper("categories");
   setupNavigationEvents();
   refreshIcons();
   trackEvent("webview_opened", { step: "categories" });
@@ -288,7 +308,7 @@ function hideVariationAlert() {
 function updateCartButtonState(enabled) {
   if (enabled && state.selectedVariation?.addToCartLink) {
     dom.addToCartBtn.className =
-      "w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl text-center transition-all duration-200 shadow-glow flex items-center justify-center gap-2 text-sm cursor-pointer";
+      "catalog-cta w-full py-3 px-4 font-bold text-center transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-pointer";
   } else {
     dom.addToCartBtn.className =
       "w-full py-3 px-4 bg-slate-300 text-slate-500 font-bold rounded-xl text-center transition-all duration-200 flex items-center justify-center gap-2 text-sm cursor-not-allowed shadow-none";
@@ -485,7 +505,7 @@ function renderProducts(products) {
               </div>
 
               <button
-                class="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold rounded-xl shadow-glow flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                class="catalog-cta w-full py-2.5 px-3 text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 data-product-ids="${(product.productIds || [product.productId]).join(",")}"
                 onclick="viewProductDetails(this)"
               >
@@ -510,6 +530,12 @@ function renderProducts(products) {
     slidesPerView: 1,
     spaceBetween: 12,
     grabCursor: true,
+    // Telas largas: mais cards lado a lado (conta a largura do carrossel, não a da janela)
+    breakpointsBase: "container",
+    breakpoints: {
+      560: { slidesPerView: 2, spaceBetween: 16 },
+      720: { slidesPerView: 3, spaceBetween: 16 },
+    },
     pagination: {
       el: ".swiper-pagination",
       clickable: true,

@@ -3,15 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <!-- A URL carrega o token do acompanhamento: não enviar como referrer para outros sites -->
+    <meta name="referrer" content="no-referrer" />
     <title>Catálogo - Mizuno</title>
 
-    <!-- Detecção da loja pela URL (?store=mizuno|olympikus|underarmour) -->
+    <!-- Detecção da loja pela URL (?store=mizuno|olympikus|underarmour). O tema da
+         marca é aplicado antes da primeira pintura (sem "piscar" no azul padrão) e
+         só as fontes da marca aberta vêm do Google Fonts. -->
     <script>
       window.__CATALOG_STORE__ = (function () {
         var params = new URLSearchParams(window.location.search);
         var raw = (params.get("store") || "mizuno").toLowerCase();
         var labels = { mizuno: "Mizuno", olympikus: "Olympikus", underarmour: "Under Armour" };
+        var fonts = {
+          mizuno: "family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,800",
+          olympikus: "family=Roboto+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=Roboto:wght@400;500;700",
+          underarmour: "family=Archivo:wght@700;800;900&family=Inter:wght@400;500;600;700",
+        };
         var key = labels[raw] ? raw : "mizuno";
+        document.documentElement.setAttribute("data-brand", key);
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://fonts.googleapis.com/css2?" + fonts[key] + "&display=swap";
+        document.head.appendChild(link);
         return { key: key, label: labels[key] };
       })();
       document.title = "Catálogo " + window.__CATALOG_STORE__.label;
@@ -40,25 +54,24 @@
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
+      var shade = function (n) {
+        return "rgb(var(--brand-" + n + ") / <alpha-value>)";
+      };
       tailwind.config = {
         theme: {
           extend: {
+            // A paleta "blue" usada nas telas passa a ser a cor da marca (variáveis em brand-theme.css)
             colors: {
-              brand: {
-                50: "#eff6ff",
-                100: "#dbeafe",
-                200: "#bfdbfe",
-                500: "#3b82f6",
-                600: "#2563eb",
-                700: "#1d4ed8",
-                800: "#1e40af",
-                900: "#1e3a8a",
-              },
+              blue: { 50: shade(50), 100: shade(100), 200: shade(200), 300: shade(300), 400: shade(400), 500: shade(500), 600: shade(600), 700: shade(700), 800: shade(800), 900: shade(900) },
+            },
+            fontFamily: {
+              sans: ["var(--font-body)", "ui-sans-serif", "system-ui", "sans-serif"],
+              display: ["var(--font-display)", "ui-sans-serif", "system-ui", "sans-serif"],
             },
             boxShadow: {
               soft: "0 2px 12px -2px rgba(0, 0, 0, 0.06)",
               card: "0 8px 20px -4px rgba(0, 0, 0, 0.08), 0 4px 8px -4px rgba(0, 0, 0, 0.04)",
-              glow: "0 8px 20px -4px rgba(37, 99, 235, 0.35)",
+              glow: "0 8px 20px -4px rgb(var(--brand-600) / 0.35)",
             },
           },
         },
@@ -70,38 +83,40 @@
 
     <!-- Swiper CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.css" />
-    <!-- Catálogo CSS Custom -->
+    <!-- Identidade por marca (variáveis, layout em telas largas) e estilos do catálogo -->
+    <link rel="stylesheet" href="../css/brand-theme.css" />
     <link rel="stylesheet" href="../css/catalog.css" />
   </head>
-  <body class="bg-slate-50 text-slate-800 antialiased font-sans min-h-screen flex flex-col items-center justify-start select-none">
-    <!-- Widget App Shell (~400px width limit) -->
-    <div class="w-full max-w-[440px] min-h-screen bg-slate-50 flex flex-col relative shadow-sm border-x border-slate-200/60">
-      <!-- Top Bar Header -->
-      <header class="bg-white/95 backdrop-blur-md sticky top-0 z-40 px-4 pb-2 h-11 border-b border-slate-200/80 flex items-center justify-between h-14 shrink-0 shadow-sm">
-        <div class="flex items-center gap-2.5">
-          <!-- Back Button (mostrado dinamicamente) -->
-          <button
-            id="headerBackBtn"
-            class="hidden w-8 h-8 rounded-xl bg-slate-100 hover:bg-blue-50 text-slate-700 hover:text-blue-600 items-center justify-center transition-colors cursor-pointer"
-            aria-label="Voltar"
-          >
-            <i data-lucide="arrow-left" class="w-4 h-4"></i>
-          </button>
-
-          <!-- Logo & Título -->
-          <div class="flex items-center gap-2" id="headerBrand">
-            <div class="w-7 h-7 rounded-lg bg-gradient-to-tr from-blue-700 to-blue-500 flex items-center justify-center text-white shadow-sm shadow-blue-500/20">
-              <i data-lucide="shopping-bag" class="w-4 h-4"></i>
-            </div>
-            <span id="headerTitle" class="font-bold text-base text-slate-900 tracking-tight">Catálogo Mizuno</span>
+  <body class="brand-page catalog-page text-slate-800 antialiased font-sans min-h-screen select-none">
+    <div class="shell">
+      <!-- Painel da marca: só em telas largas (link no navegador, tablet, widget em tela cheia) -->
+      <aside class="brand-aside" aria-label="Catálogo">
+        <div class="brand-aside-inner">
+          <span class="brand-logo" data-brand-logo></span>
+          <div class="brand-aside-hero">
+            <p class="brand-eyebrow" id="asideEyebrow">Catálogo oficial</p>
+            <h1 class="brand-hero-title font-display">Catálogo<br /><span class="accent" id="asideBrandName">Mizuno</span></h1>
+            <p class="brand-aside-text">Escolha seu próximo produto e finalize a compra na loja oficial.</p>
           </div>
+          <ol class="stepper" id="stepper"></ol>
         </div>
+      </aside>
 
-        <span id="headerBadge" class="text-[11px] font-bold px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full border border-blue-100"> Oficial </span>
-      </header>
+      <div class="shell-main">
+        <!-- Top Bar Header -->
+        <header class="brand-header">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <!-- Back Button (mostrado dinamicamente) -->
+            <button id="headerBackBtn" class="brand-back hidden" aria-label="Voltar">
+              <i data-lucide="arrow-left" class="w-4 h-4"></i>
+            </button>
+            <span id="headerTitle" class="brand-header-title font-display truncate">Catálogo Mizuno</span>
+          </div>
+          <span class="brand-logo brand-logo-header" data-brand-logo></span>
+        </header>
 
       <!-- Main Content Container -->
-      <main class="flex-1 px-4 py-2 flex flex-col justify-start overflow-y-auto">
+      <main class="app-main">
         <!-- ========================================== -->
         <!-- VIEW 1: SELEÇÃO DE CATEGORIAS              -->
         <!-- ========================================== -->
@@ -111,7 +126,7 @@
               <i data-lucide="layout-grid" class="w-3.5 h-3.5"></i>
               <span>Categorias</span>
             </div>
-            <h2 class="text-xl font-extrabold text-slate-900 leading-tight">Escolha o que procura</h2>
+            <h2 class="catalog-title text-xl text-slate-900">Escolha o que procura</h2>
             <p class="text-xs text-slate-500 mt-0.5">Selecione uma categoria ou pesquise por um produto</p>
           </div>
 
@@ -135,7 +150,7 @@
             </button>
           </div>
 
-          <div id="categoriesContainer" class="grid grid-cols-2 gap-2.5">
+          <div id="categoriesContainer" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 md:gap-3.5">
             <!-- Categorias renderizadas dinamicamente via JS -->
           </div>
         </section>
@@ -197,10 +212,11 @@
           </div>
 
           <!-- Product Card Container -->
-          <div class="bg-white rounded-2xl p-4 shadow-card border border-slate-100 flex flex-col gap-3.5 flex-1">
+          <div class="details-card bg-white rounded-2xl p-4 shadow-card border border-slate-100 flex-1">
+           <div class="details-media">
             <!-- Imagem Principal -->
-            <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/70 rounded-xl p-3 flex items-center justify-center border border-slate-200/70 h-48 overflow-hidden group">
-              <img id="mainImage" src="" alt="Produto" class="max-h-44 w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-200 group-hover:scale-105" />
+            <div class="relative bg-gradient-to-b from-slate-50 to-slate-100/70 rounded-xl p-3 flex items-center justify-center border border-slate-200/70 h-48 md:h-72 overflow-hidden group">
+              <img id="mainImage" src="" alt="Produto" class="max-h-44 md:max-h-64 w-auto max-w-full object-contain mix-blend-multiply transition-transform duration-200 group-hover:scale-105" />
             </div>
 
             <!-- Miniaturas (se houver mais de uma foto) -->
@@ -209,10 +225,12 @@
                 <!-- Miniaturas via JS -->
               </div>
             </div>
+           </div>
 
+           <div class="details-info">
             <!-- Nome & Preço -->
             <div>
-              <h1 id="productName" class="text-base font-extrabold text-slate-900 leading-snug line-clamp-2"></h1>
+              <h1 id="productName" class="catalog-title text-base text-slate-900 leading-snug line-clamp-2 md:line-clamp-3 md:text-xl"></h1>
               <div id="productPriceContainer" class="mt-1 flex items-baseline gap-2">
                 <span id="productPrice" class="text-lg font-black text-blue-700"></span>
                 <span id="productListPrice" class="text-xs text-slate-400 line-through hidden"></span>
@@ -299,6 +317,7 @@
                 Checkout seguro VTEX
               </p>
             </div>
+           </div>
           </div>
         </section>
 
@@ -321,12 +340,14 @@
           <button onclick="loadCategories()" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer">Tentar novamente</button>
         </div>
       </main>
+      </div>
     </div>
 
     <!-- Swiper JS -->
     <script src="https://cdn.jsdelivr.net/npm/swiper@11/swiper-bundle.min.js"></script>
 
     <!-- Catálogo JS -->
+    <script src="../js/shared/brand.js"></script>
     <script src="../js/shared/tracking.js"></script>
     <script src="../js/catalog.js"></script>
   </body>

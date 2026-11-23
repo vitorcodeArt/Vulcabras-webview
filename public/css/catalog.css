@@ -4,7 +4,7 @@
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: #d9e4ff #f1f5f9;
+  scrollbar-color: rgb(var(--brand-200)) #f1f5f9;
 }
 
 #thumbnailsContainer {
@@ -17,10 +17,10 @@ html {
 }
 
 .category-btn.active {
-  background-color: #2563eb !important;
-  border-color: #2563eb !important;
+  background-color: rgb(var(--brand-600)) !important;
+  border-color: rgb(var(--brand-600)) !important;
   color: #ffffff !important;
-  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.35);
+  box-shadow: 0 10px 25px -5px rgb(var(--brand-600) / 0.35);
   transform: translateY(-2px);
 }
 
@@ -44,7 +44,7 @@ html {
 }
 
 .productCarousel .swiper-pagination-bullet-active {
-  background-color: #2563eb;
+  background-color: rgb(var(--brand-600));
   width: 24px;
 }
 
@@ -54,9 +54,9 @@ html {
 }
 
 .thumbnail-image.active {
-  border-color: #2563eb !important;
+  border-color: rgb(var(--brand-600)) !important;
   box-shadow:
-    0 0 0 2px rgba(37, 99, 235, 0.3),
+    0 0 0 2px rgb(var(--brand-600) / 0.3),
     0 4px 6px -1px rgba(0, 0, 0, 0.1);
   transform: scale(1.05);
 }
@@ -94,4 +94,80 @@ html {
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
+}
+
+/* ============================================================
+   IDENTIDADE POR MARCA E TELAS LARGAS (variáveis em brand-theme.css)
+   ============================================================ */
+
+/* Título dos blocos segue a fonte e o estilo da marca */
+.catalog-title {
+  font-family: var(--font-display);
+  font-weight: var(--display-weight);
+  letter-spacing: var(--display-tracking);
+  text-transform: var(--display-transform);
+  line-height: 1.1;
+}
+
+/* Botão principal da marca (cor, raio e hover vêm das variáveis) */
+.catalog-cta {
+  background: var(--cta-bg);
+  color: var(--cta-ink);
+  border-radius: var(--btn-radius);
+  box-shadow: 0 8px 20px -4px rgb(var(--brand-600) / 0.35);
+}
+.catalog-cta:hover {
+  background: var(--cta-hover);
+}
+.catalog-cta:active {
+  transform: scale(0.99);
+}
+
+/* Detalhe do produto: mídia e informações (duas colunas só em telas largas) */
+.details-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.details-media,
+.details-info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  /* Conteúdo mais largo que o da troca: o catálogo tem grade e carrossel */
+  .catalog-page .app-main,
+  .catalog-page .brand-header {
+    max-width: 960px;
+  }
+  .catalog-page .app-main {
+    padding-top: 0;
+  }
+}
+
+@media (min-width: 900px) {
+  .details-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 28px;
+    padding: 24px;
+    align-items: start;
+  }
+  .details-info {
+    gap: 16px;
+  }
+}
+
+/* O carrossel (Swiper) não pode alargar a coluna do grid: sem min-width o
+   conteúdo empurra a página para o lado em telas largas */
+.catalog-page .shell-main,
+.catalog-page .app-main,
+.catalog-page .app-main > section {
+  min-width: 0;
+}
+.catalog-page .productCarousel {
+  max-width: 100%;
 }
