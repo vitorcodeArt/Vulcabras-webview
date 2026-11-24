@@ -442,3 +442,12 @@ test("rótulos do contrato e código desconhecido mostra o próprio código", ()
   assert.equal(labels.stepLabel(null), null);
   assert.equal(labels.stepLabel("constructor"), "constructor", "não herda de Object.prototype");
 });
+
+test("rótulos: etapas submit e error têm nome em português; chave desconhecida mostra a própria chave", () => {
+  const labels = require("../lib/analytics-labels");
+  assert.equal(labels.stepLabel("error"), "Tela de erro");
+  assert.equal(labels.stepLabel("submit"), "Envio da solicitação");
+  assert.equal(labels.stepLabel("etapa_nova"), "etapa_nova");
+  assert.equal(labels.errorLabel("UNKNOWN_ERROR"), "Erro com código não reconhecido");
+  assert.equal(labels.errorLabel("NO_REASONS_FOR_TYPE"), "Sem opção de troca ou devolução");
+});

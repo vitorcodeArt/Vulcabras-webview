@@ -131,7 +131,12 @@ async function submit() {
   const prepared = result.data;
 
   if (!prepared.eligible) {
-    trackEvent("error_shown", { step: "identify", error_code: prepared.ineligibility_code || "ORDER_NOT_ELIGIBLE" });
+    // Código padronizado no campo error_code; o motivo bruto do Troque vai no meta (o servidor mascara).
+    trackEvent("error_shown", {
+      step: "identify",
+      error_code: "ORDER_NOT_ELIGIBLE",
+      meta: { ineligibility_code: prepared.ineligibility_code || null, detail: prepared.ineligibility_message || null },
+    });
     showFatal({
       message: prepared.ineligibility_message || "Este pedido não pode ser trocado ou devolvido no momento.",
       code: "ORDER_NOT_ELIGIBLE",

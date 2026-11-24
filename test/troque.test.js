@@ -176,3 +176,31 @@ test("registra api_call sem token nem argumentos", async () => {
   assert.ok(!serialized.includes(TOKEN));
   assert.ok(!serialized.includes("00000000000"));
 });
+
+test("api_call com falha leva o código do Troque no meta, sem a message nem os argumentos", async () => {
+  const records = [];
+  setSink((r) => records.push(r));
+  const { c } = client([jsonResponse({ error_code: "ORDER_NOT_FOUND", message: "pedido 999 de 000.000.000-00 não existe" }, { isError: true })]);
+  await assert.rejects(
+    c.callTool("prepare_reverse_order", { ecommerce_number: "999", customer_identifier: "00000000000" }, { token: TOKEN, context: { conversationId: "conv1", brand: "underarmour", step: "identify" } }),
+    { code: "ORDER_NOT_FOUND" },
+  );
+  assert.equal(records.length, 1);
+  assert.equal(records[0].error_code, "ORDER_NOT_FOUND");
+  assert.equal(records[0].meta.ok, false);
+  assert.equal(records[0].meta.upstream_code, "ORDER_NOT_FOUND");
+  const serialized = JSON.stringify(records[0]);
+  assert.ok(!serialized.includes("000.000.000-00"));
+  assert.ok(!serialized.includes("00000000000"));
+  assert.ok(!serialized.includes("não existe"));
+  assert.ok(!serialized.includes(TOKEN));
+});
+
+test("api_call com código do Troque fora do formato: error_code vira UNKNOWN_ERROR e o original fica mascarado no meta", async () => {
+  const records = [];
+  setSink((r) => records.push(r));
+  const { c } = client([jsonResponse({ error_code: "codigo estranho com 123456789 dentro" }, { isError: true })]);
+  await assert.rejects(c.callTool("prepare_reverse_order", {}, { token: TOKEN, context: { conversationId: "conv1", brand: "mizuno", step: "identify" } }));
+  assert.equal(records[0].error_code, "UNKNOWN_ERROR");
+  assert.equal(records[0].meta.upstream_code, "codigo estranho com ••• dentro");
+});
