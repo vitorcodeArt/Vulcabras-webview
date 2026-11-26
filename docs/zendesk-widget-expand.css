@@ -1,0 +1,7 @@
+/* Cole no style.css do tema da Central de Ajuda (substitui o bloco .webview-reverse) */
+@media (min-width: 1024px) {
+  iframe.webview-wide {
+    width: min(820px, calc(100vw - 32px)) !important;
+    height: min(720px, calc(100dvh - 119px)) !important;
+  }
+}

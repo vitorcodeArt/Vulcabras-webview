@@ -23,7 +23,7 @@ Este documento é a fonte única do que o **backend do webview** (repositório `
 | **Clique** | Existe uma sessão (`flow_sessions`) ligada ao `send_id`: a webview abriu e carregou. |
 | **Sem clique** | Envio bem-sucedido sem sessão. |
 | **Concluído** | `reverse`: evento `completed` (reversa criada). `catalog`: primeiro `add_to_cart_clicked`. `tracking`: sessão aberta (não há etapa final). |
-| **Status da sessão** | `completed`, `handoff` (pediu atendente), `error` (último evento foi `error_shown`), `abandoned` (último evento `abandoned` ou parada há mais de 30 min), `in_progress`. |
+| **Status da sessão** | `completed`, `handoff` (pediu atendente), `error` (último evento foi `error_shown` ou a sessão terminou na tela final de erro, `last_step = error`), `abandoned` (último evento `abandoned` ou parada há mais de 30 min), `in_progress`. |
 | **Carrinho** | Clique no link de adicionar ao carrinho da VTEX. **Não** confirma que o item ficou no carrinho nem compra. |
 | **Taxa de clique** | `clicados / (enviados com sucesso)`. |
 | **Taxa de conclusão** | duas versões: sobre clicados e sobre enviados. |
@@ -37,8 +37,8 @@ Chaves de `meta` **nunca** contêm `cpf, cnpj, document, email, mail, phone, nam
 | `webview_sent` | todos | servidor | – | vai para `webview_sends`, não para `flow_events` |
 | `webview_opened` | todos | navegador | primeira tela | – |
 | `step_viewed`, `step_completed`, `step_back` | todos | navegador | tela | `step_completed`: `duration_ms` |
-| `validation_error`, `error_shown` | todos | ambos | tela | `error_code` |
-| `api_call` | reverse | servidor | etapa | `service`, `ok`, `tool`, `duration_ms` |
+| `validation_error`, `error_shown` | todos | ambos | tela | `error_code`; em `error_shown` também `detail` (texto curto do erro, mascarado) e, quando o pedido não é elegível, `ineligibility_code` (código bruto do Troque, mascarado) |
+| `api_call` | reverse | servidor | etapa | `service`, `ok`, `tool`, `duration_ms`, `attempt`, `http_status`; com falha também `upstream_code` (código bruto da integração, mascarado). Nunca o corpo da resposta nem os argumentos |
 | `photo_added`, `photo_removed` | reverse | navegador | `reasons` | `count` |
 | `ticket_created` | reverse | servidor | `submit` | `ticket_id`, `photos` |
 | `reverse_created` | reverse | servidor | `submit` | `outcome`, `type`, `reverse_order_id`, `ticket_id`, `order_hash`, `retention_accepted` |
@@ -53,11 +53,13 @@ Chaves de `meta` **nunca** contêm `cpf, cnpj, document, email, mail, phone, nam
 
 Etapas do `reverse` (ordem): `start, identify, items, reasons, address, retention, shipping, refund, summary, result`. Etapas do `catalog`: `categories, products, details`. Confirme os nomes reais no código (`public/js/reverse/flow.js` e `catalog.js`) e ajuste este quadro se houver diferença.
 
+**Mascaramento (campos `detail`, `upstream_code`, `ineligibility_code`):** antes de gravar, o backend troca e-mails por `[e-mail]`, links por `[link]`, qualquer sequência de 6 ou mais dígitos (CPF, CNPJ, telefone, pedido, CEP) e códigos opacos de 20 ou mais caracteres com letras e números por `•••`, e corta em 120 caracteres. Não reconhece nomes próprios: por isso só entram textos do sistema, nunca texto digitado pelo cliente. Um `error_code` fora do formato (espaço ou mais de 40 caracteres) é gravado como `UNKNOWN_ERROR`.
+
 ## 4. Rótulos em português (a API devolve `label` junto da chave)
 
-- **Etapas:** `start` Início · `identify` Identificação · `items` Itens · `reasons` Motivo · `address` Endereço · `retention` Vale-compras · `shipping` Envio · `refund` Reembolso · `summary` Resumo · `result` Resultado · `categories` Categorias · `products` Produtos · `details` Detalhe do produto.
+- **Etapas:** `start` Início · `identify` Identificação · `items` Itens · `reasons` Motivo · `address` Endereço · `retention` Vale-compras · `shipping` Envio · `refund` Reembolso · `summary` Resumo · `result` Resultado · `categories` Categorias · `products` Produtos · `details` Detalhe do produto · `submit` Envio da solicitação · `error` Tela de erro.
 - **Eventos:** `webview_opened` Abriu a webview · `step_viewed` Viu a etapa · `step_completed` Concluiu a etapa · `step_back` Voltou · `validation_error` Erro de preenchimento · `error_shown` Viu um erro · `api_call` Chamada a serviço · `photo_added` Adicionou foto · `photo_removed` Removeu foto · `ticket_created` Ticket criado · `reverse_created` Solicitação criada · `completed` Concluiu · `handoff_requested` Pediu atendente · `abandoned` Saiu da webview · `category_selected` Escolheu categoria · `search_performed` Pesquisou · `product_viewed` Viu produto · `variation_selected` Escolheu tamanho/cor · `add_to_cart_clicked` Clicou em adicionar ao carrinho.
-- **Erros** (`error_code`): `TEMPORARY_FAILURE` Falha temporária no Troque · `ORDER_NOT_FOUND` Pedido não encontrado · `ORDER_NOT_ELIGIBLE` Pedido não elegível · `VALIDATION_FAILED` Dados inválidos · `PHOTO_REQUIRED` Foto obrigatória · `PHOTO_UPLOAD_FAILED` Falha ao enviar foto · `SESSION_EXPIRED` Sessão expirada · `UNAUTHORIZED` Token do Troque inválido · `RATE_LIMITED` Limite de uso · `CREATION_UNCONFIRMED` Criação não confirmada · `MESSAGE_NOT_POSTED` Mensagem final não postada · `HANDOFF_REQUIRED` Motivo vai para atendente · código desconhecido: mostrar o próprio código.
+- **Erros** (`error_code`): `TEMPORARY_FAILURE` Falha temporária no Troque · `ORDER_NOT_FOUND` Pedido não encontrado · `ORDER_NOT_ELIGIBLE` Pedido não elegível · `VALIDATION_FAILED` Dados inválidos · `PHOTO_REQUIRED` Foto obrigatória · `PHOTO_UPLOAD_FAILED` Falha ao enviar foto · `SESSION_EXPIRED` Sessão expirada · `UNAUTHORIZED` Token do Troque inválido · `RATE_LIMITED` Limite de uso · `CREATION_UNCONFIRMED` Criação não confirmada · `MESSAGE_NOT_POSTED` Mensagem final não postada · `HANDOFF_REQUIRED` Motivo vai para atendente · `NO_REASONS_FOR_TYPE` Sem opção de troca ou devolução · `TOO_MANY_ATTEMPTS` Muitas tentativas de localizar o pedido · `UNKNOWN_ERROR` Erro com código não reconhecido (o texto original segue mascarado em `meta.upstream_code`/`meta.detail`) · código desconhecido: mostrar o próprio código.
 - **Resultados** (`outcome`): `approved_with_shipping` Aprovada, com envio · `approved_without_shipping` Aprovada, sem envio contratado · `pending_analysis` Em análise · `approved_shipping_failed` Aprovada, envio falhou.
 - **Status:** `completed` Concluído · `handoff` Pediu atendente · `error` Terminou com erro · `abandoned` Abandonou · `in_progress` Em andamento · `not_clicked` Sem clique · `send_failed` Falha no envio.
 

@@ -186,7 +186,8 @@ Cada evento é uma linha JSON no log com `"kind":"flow_event"`. Para ver uma jor
   - `ticket_created`, `reverse_created`, `completed`;
   - `handoff_requested`, `abandoned`, `error_shown`.
 - **Privacidade:**
-  - o número do pedido vai só como hash (`order_hash`);
+  - nos eventos e logs, o número do pedido vai só como hash (`order_hash`);
+  - única exceção: o número do pedido e os produtos selecionados no webview ficam na tabela `flow_session_orders` e saem só em `GET /api/analytics/sends/:sendId`;
   - chaves de `meta` com nome de dado pessoal (cpf, email, nome, endereço, pix, banco, comentário, token...) são descartadas.
 
 ## Banco de acompanhamento

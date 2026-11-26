@@ -194,7 +194,8 @@ export function showFatal({ message, code = null, action = "handoff", offerTrack
 // false quando a tela deve mostrar o erro no próprio lugar (retry/fix_input).
 export function handleApiError(result, step) {
   const { code, error, action } = result.data;
-  trackEvent("error_shown", { step, error_code: code });
+  // O texto curto que a API devolveu (já sem dado pessoal) ajuda o analista a entender o motivo
+  trackEvent("error_shown", { step, error_code: code, meta: typeof error === "string" ? { detail: error } : undefined });
 
   if (action === "handoff" || action === "close" || action === "track") {
     showFatal({ message: error, code, action });
