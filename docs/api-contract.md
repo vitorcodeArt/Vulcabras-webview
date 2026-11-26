@@ -13,7 +13,7 @@ Este documento é a fonte única do que o **backend do webview** (repositório `
 - **Taxas:** números de 0 a 1 (ou `null` se o denominador for 0). O app formata em %.
 - **Paginação:** por cursor (`limit` de 1 a 100, padrão 50; `next_cursor` opaco ou `null`).
 - **Limite de uso:** 60 requisições por minuto por segredo (`429 RATE_LIMITED`).
-- **Sem dados pessoais** além de `customer_name`. Pedido só como hash, com uma única exceção: o número do pedido em `GET /sends/:sendId` (seção 5.5).
+- **Sem dados pessoais** além de `customer_name`. Pedido só como hash, com uma única exceção: o número do pedido em `GET /sends/:sendId` (seção 5.5) e em `GET /sends/:sendId/order` (5.5.1).
 
 ## 2. Definições
 
@@ -147,7 +147,32 @@ Na troca/devolução (`flow = reverse`), a resposta também traz o pedido e os p
 | `items[].image_url` | texto ou `null` | URL `https://` pública, sem token nem dado do cliente. Outros formatos são ignorados pelo app. |
 
 - Os campos são opcionais: ausentes, `null` ou lista vazia (outros fluxos, sem clique, pedido ainda não identificado, nenhum item selecionado ou envios anteriores a esta mudança), o app não mostra o bloco.
-- `order_number` e `items` existem **somente** neste endpoint. Não entram em 5.4, 5.6, no CSV (5.9), no `meta` dos eventos nem em logs. No `meta`, o pedido continua só como `order_hash`.
+- `order_number` e `items` existem **somente** neste endpoint (e o número também em 5.5.1). Não entram em 5.4, 5.6, no CSV (5.9), no `meta` dos eventos nem em logs. No `meta`, o pedido continua só como `order_hash`.
+
+### 5.5.1 `GET /sends/:sendId/order`
+Pedido consultado **na VTEX, na hora** (nada é gravado), usando o número guardado do envio (5.5) e as chaves da marca no servidor. O app chama só este endpoint, nunca a VTEX.
+```json
+{
+  "order_number": "1000000000000-01",
+  "order_verified": true,
+  "reason": null,
+  "order": {
+    "order_id": "1000000000000-01", "status": "invoiced", "status_label": "Faturado",
+    "created_at": "ISO", "invoiced_at": "ISO",
+    "totals": { "items_cents": 17999, "discounts_cents": -6300, "shipping_cents": 986, "total_cents": 12685 },
+    "items": [ { "name": "Tênis Demo", "variation": "40 Preto", "ref_id": "0000000-001-40", "quantity": 1,
+                 "price_cents": 11699, "list_price_cents": 24999, "image_url": "https://exemplo.com/produto.jpg" } ],
+    "shipping": { "courier": "Transportadora Demo", "method": "Normal", "estimate_at": "ISO" },
+    "packages": [ { "courier": "Transportadora Demo", "tracking_number": "DEMO123", "tracking_url": "https://exemplo.com/rastreio", "delivered_at": "ISO" } ],
+    "payments": [ { "method": "Mastercard", "installments": 2 } ]
+  }
+}
+```
+- `reason`: `null` (há `order`) · `no_order_number` (outro fluxo, sem clique ou número não guardado) · `not_found` (a VTEX não achou) · `not_configured` (marca sem chaves) · `forbidden` (chave sem permissão de leitura de pedidos) · `unavailable` (falha ou demora da VTEX). Todos respondem `200`, com `order: null`.
+- Valores em **centavos** (inteiros). `price_cents` é o preço unitário pago. Qualquer campo pode vir `null`.
+- **Lista fechada:** só os campos acima saem. Nunca documento, nome, e-mail, telefone, endereço, dados de cartão ou de transação, nota fiscal (XML, chave, link) nem nomes de campanhas ou descontos.
+- `order_verified: false`: o número foi só digitado pelo cliente; o pedido encontrado **pode não ser dele**, e o app avisa.
+- `image_url` e `tracking_url`: `https://` pública, sem token na consulta da URL.
 
 ### 5.6 `GET /sessions/:sessionId`
 ```json

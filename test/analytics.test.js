@@ -24,9 +24,9 @@ function fakeDb(handler = () => []) {
   };
 }
 
-async function start(t, { db = fakeDb(), env = { ANALYTICS_API_SECRET: SECRET }, now = () => NOW } = {}) {
+async function start(t, { db = fakeDb(), env = { ANALYTICS_API_SECRET: SECRET }, now = () => NOW, vtex } = {}) {
   const app = express();
-  app.use("/api/analytics", createAnalyticsRouter({ db, env, now }));
+  app.use("/api/analytics", createAnalyticsRouter({ db, env, now, vtex }));
   const server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
   });
@@ -553,4 +553,28 @@ test("evento de recusa tem rótulo próprio; erro comum continua 'Viu um erro'",
   assert.equal(data.session_status, "not_eligible");
   assert.equal(data.status_label, "Não elegível");
   assert.deepEqual(data.events.map((e) => e.event_label), ["Viu o aviso de pedido não elegível", "Viu um erro"]);
+});
+
+test("sends/:id/order: usa o número guardado, a marca do envio e devolve o resultado da VTEX", async (t) => {
+  const asked = [];
+  const vtex = { lookup: async (brand, number) => (asked.push([brand, number]), { order: { order_id: number }, reason: null }) };
+  const db = orderDb(sendRow(), [{ ...ORDER_ROW, verified: false }]);
+  const { get } = await start(t, { db, vtex });
+  const res = await get(`/sends/${SEND_ID}/order`);
+  assert.equal(res.status, 200);
+  const { data } = await res.json();
+  assert.deepEqual(data, { order_number: "1000000000001-01", order_verified: false, reason: null, order: { order_id: "1000000000001-01" } });
+  assert.deepEqual(asked, [[sendRow().brand, "1000000000001-01"]]);
+});
+
+test("sends/:id/order: sem número, outro fluxo ou sem clique não consulta a VTEX; exige o segredo", async (t) => {
+  const vtex = { lookup: async () => assert.fail("não deveria consultar") };
+  for (const db of [orderDb(sendRow(), []), orderDb(sendRow({ flow: "catalog" }), [ORDER_ROW]), orderDb(sendRow({ click_status: "not_clicked", session_id: null }), [ORDER_ROW])]) {
+    const { get } = await start(t, { db, vtex });
+    const { data } = await (await get(`/sends/${SEND_ID}/order`)).json();
+    assert.deepEqual(data, { order_number: null, order_verified: null, reason: "no_order_number", order: null });
+  }
+  const { get } = await start(t, { db: fakeDb(() => []), vtex });
+  assert.equal((await get(`/sends/${SEND_ID}/order`)).status, 404);
+  assert.equal((await get("/sends/x/order")).status, 400);
 });
