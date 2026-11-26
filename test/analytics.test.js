@@ -261,19 +261,24 @@ test("sends: busca q por conversa, hash do pedido e nome (com % e _ escapados)",
 
   await get(`/sends?q=${encodeURIComponent("# 1664284820905-01")}`);
   const { hashOrderNumber } = require("../lib/tracking");
-  const byOrder = db.calls[0];
+  // a lista é a consulta em v_sends; antes dela há a busca do pedido gravado
+  const lists = () => db.calls.filter((c) => c.text.includes("v_sends"));
+  const lookup = db.calls.find((c) => c.text.includes("from flow_session_orders where order_number"));
+  assert.deepEqual(lookup.params, ["1664284820905-01"]);
+  assert.ok(!lookup.text.includes("1664284820905"));
+  const byOrder = lists()[0];
   assert.ok(byOrder.text.includes("order_hash ="));
   assert.ok(byOrder.params.includes(hashOrderNumber("1664284820905-01")));
   assert.ok(!byOrder.text.includes("1664284820905") && !byOrder.params.includes("1664284820905-01"));
 
   await get(`/sends?q=${encodeURIComponent("50%_x")}`);
-  const byName = db.calls[1];
+  const byName = lists()[1];
   assert.ok(byName.text.includes("v.conversation_id ="));
   assert.ok(byName.text.includes("ilike"));
   assert.ok(byName.params.includes("%50\\%\\_x%"));
 
   await get("/sends?q=ab"); // menos de 3 caracteres: só conversa exata
-  assert.ok(!db.calls[2].text.includes("ilike"));
+  assert.ok(!lists()[2].text.includes("ilike"));
   assert.equal(escapeLike("a%b_c\\"), "a\\%b\\_c\\\\");
 });
 

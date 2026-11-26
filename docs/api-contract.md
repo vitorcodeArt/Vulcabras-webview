@@ -102,7 +102,7 @@ Base de cálculo: `v_sends` filtrado por `sent_at` no período. `errors` conta s
 ### 5.4 `GET /sends?from&to&brand&flow&click_status&status&q&limit&cursor`
 Lista principal para os analistas: **todo botão enviado**, com o que aconteceu depois.
 - `click_status`: `clicked | not_clicked | send_failed`. `status`: status da sessão (seção 2).
-- `q`: ID da conversa exato, **ou** número do pedido (o servidor calcula o mesmo hash e compara com `order_hash`), **ou** parte do nome do cliente (mínimo 3 caracteres).
+- `q`: ID da conversa exato, **ou** número do pedido (o servidor compara o hash com `order_hash` e também o número gravado do pedido, inclusive o não localizado; o número não sai na lista), **ou** parte do nome do cliente (mínimo 3 caracteres).
 ```json
 {
   "items": [
@@ -138,7 +138,8 @@ Na troca/devolução (`flow = reverse`), a resposta também traz o pedido e os p
 
 | Campo | Tipo | Regra |
 |---|---|---|
-| `order_number` | texto ou `null` | Número do pedido que o cliente selecionou. |
+| `order_number` | texto ou `null` | Número do pedido consultado pelo cliente. Gravado já na digitação, mesmo que o Troque não o localize ou a consulta falhe. Valores que parecem CPF ou CNPJ, ou repetem a identificação digitada, não são gravados. |
+| `order_verified` | booleano ou `null` | `true`: o Troque confirmou o pedido. `false`: número apenas digitado (não localizado ou consulta com falha); o app avisa. Um número não confirmado nunca substitui um confirmado da mesma sessão. `null` quando não há `order_number`. |
 | `items` | lista | Somente os produtos selecionados pelo cliente, não o pedido inteiro. |
 | `items[].title` | texto | Obrigatório em cada item. |
 | `items[].sku` | texto ou `null` | |

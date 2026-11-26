@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { useFakeEnv } = require("./helpers");
 const { preparedOrder, createdReverse, IDENTITY } = require("./fixtures");
 const { createReverseService } = require("../lib/reverse/service");
-const { saveOrderDetails, selectedItems, publicImageUrl } = require("../lib/order-details");
+const { saveOrderDetails, selectedItems, publicImageUrl, typedOrderNumber } = require("../lib/order-details");
 const { setSink } = require("../lib/tracking");
 const { getBrand } = require("../lib/brands");
 
@@ -46,14 +46,16 @@ test("imagem: só https pública, sem token nem dado do cliente", () => {
   }
 });
 
-test("prepare grava o pedido; a cotação grava os itens escolhidos", async () => {
+test("prepare grava o número digitado e depois o confirma; a cotação grava os itens escolhidos", async () => {
   const { service, saved } = setup({ prepare_reverse_order: preparedOrder(), quote_return_shipping: { shipping_options: [] } });
   await service.prepare(flow(), IDENTITY);
-  assert.deepEqual(saved, [{ sessionId: SESSION, sendId: "s1", conversationId: "conv1", orderNumber: ORDER, items: [] }]);
+  const base = { sessionId: SESSION, sendId: "s1", conversationId: "conv1", orderNumber: ORDER, items: [] };
+  assert.deepEqual(saved, [{ ...base, verified: false }, { ...base, verified: true }]);
 
   await service.quote(flow(), { ...IDENTITY, type: "exchange", items: [ITEM] });
-  assert.deepEqual(saved[1].items, [EXPECTED_ITEM]);
-  const fields = ["conversationId", "items", "orderNumber", "sendId", "sessionId"];
+  assert.deepEqual(saved[2].items, [EXPECTED_ITEM]);
+  assert.equal(saved[2].verified, true);
+  const fields = ["conversationId", "items", "orderNumber", "sendId", "sessionId", "verified"];
   assert.ok(saved.every((row) => Object.keys(row).sort().join() === fields.join()), "identificação do cliente nunca é gravada");
 });
 
@@ -75,19 +77,58 @@ test("envio grava os itens mesmo sem prepare em memória", async () => {
   assert.deepEqual(saved[0].items, [EXPECTED_ITEM]);
 });
 
-test("bot (sem sessão de webview) não grava; pedido não encontrado também não", async () => {
+test("bot (sem sessão de webview) não grava", async () => {
   const bot = setup({ prepare_reverse_order: preparedOrder(), quote_return_shipping: { shipping_options: [] } });
   await bot.service.prepare(flow({ sessionId: null, channel: "bot" }), IDENTITY);
   await bot.service.quote(flow({ sessionId: null }), { ...IDENTITY, type: "exchange", items: [ITEM] });
   assert.equal(bot.saved.length, 0);
+});
 
-  const missing = setup({
-    prepare_reverse_order: () => {
-      throw Object.assign(new Error("x"), { code: "ORDER_NOT_FOUND" });
-    },
-  });
+const notFound = () => {
+  throw Object.assign(new Error("x"), { code: "ORDER_NOT_FOUND" });
+};
+
+test("pedido não encontrado grava o número digitado como não confirmado, na troca e na consulta", async () => {
+  const missing = setup({ prepare_reverse_order: notFound, track_reverse_order: notFound });
   await assert.rejects(missing.service.prepare(flow(), IDENTITY));
+  await assert.rejects(missing.service.track(flow(), IDENTITY));
+  assert.equal(missing.saved.length, 2);
+  assert.ok(missing.saved.every((row) => row.verified === false && row.orderNumber === ORDER && row.items.length === 0));
+});
+
+test("o que parece CPF, CNPJ ou a própria identificação não é gravado", async () => {
+  const missing = setup({ prepare_reverse_order: notFound });
+  for (const order_number of ["12345678900", "123.456.789-00", "12345678000190", "cpf12345678900"]) {
+    await assert.rejects(missing.service.prepare(flow(), { ...IDENTITY, order_number }));
+  }
   assert.equal(missing.saved.length, 0);
+
+  assert.equal(typedOrderNumber("PED-11122233344", "11122233344"), null);
+  assert.equal(typedOrderNumber("", "11122233344"), null);
+  // números de pedido de verdade continuam passando
+  for (const order of ["1000000000001-01", "1000000000001", "4911233", "UABR-VT-1000000000001-01"]) {
+    assert.equal(typedOrderNumber(order, "11122233344"), order);
+  }
+});
+
+test("antes da migração 005: pedido confirmado grava sem a coluna; não confirmado é ignorado", async (t) => {
+  const original = console.error;
+  console.error = () => {};
+  t.after(() => (console.error = original));
+  const calls = [];
+  const db = {
+    getPool: () => ({}),
+    query: async (text, params) => {
+      calls.push({ text, params });
+      if (text.includes("verified")) throw Object.assign(new Error("x"), { code: "42703" });
+    },
+  };
+  const data = { sessionId: SESSION, conversationId: "conv1", orderNumber: ORDER };
+  assert.equal(await saveOrderDetails(data, { db }), true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].params.length, 5);
+  assert.equal(await saveOrderDetails({ ...data, verified: false }, { db }), false);
+  assert.equal(calls.length, 3);
 });
 
 test("gravação: parametrizada, best-effort e sem valores no log", async (t) => {
