@@ -171,3 +171,9 @@ html {
 .catalog-page .productCarousel {
   max-width: 100%;
 }
+
+/* Busca: só o "x" do catálogo (esconde o nativo do campo type="search") */
+#searchInput::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}

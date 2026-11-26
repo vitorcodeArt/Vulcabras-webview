@@ -27,7 +27,7 @@ const state = {
   productDetails: null,
   swiperInstance: null,
   searchQuery: null,
-  searchDebounceTimer: null,
+  searching: false,
 };
 
 const storeInfo = STORE_CONFIG[state.store];
@@ -57,6 +57,8 @@ const dom = {
   categoriesContainer: document.getElementById("categoriesContainer"),
   searchInput: document.getElementById("searchInput"),
   searchClearBtn: document.getElementById("searchClearBtn"),
+  searchSubmitBtn: document.getElementById("searchSubmitBtn"),
+  searchHint: document.getElementById("searchHint"),
 
   productsSection: document.getElementById("productsSection"),
   productsCarousel: document.getElementById("productsCarousel"),
@@ -184,6 +186,7 @@ function setView(viewName) {
     state.searchQuery = null;
     if (dom.searchInput) dom.searchInput.value = "";
     dom.searchClearBtn?.classList.add("hidden");
+    dom.searchHint?.classList.add("hidden");
   } else if (viewName === "products") {
     dom.productsSection?.classList.remove("hidden");
     dom.headerBackBtn?.classList.remove("hidden");
@@ -233,32 +236,40 @@ function setupNavigationEvents() {
 
   dom.addToCartBtn?.addEventListener("click", handleAddToCart);
 
+  // A busca não dispara sozinha enquanto o cliente digita: só no Enter ou no botão
   dom.searchInput?.addEventListener("input", () => {
-    const value = dom.searchInput.value;
-    dom.searchClearBtn?.classList.toggle("hidden", !value);
-
-    clearTimeout(state.searchDebounceTimer);
-    state.searchDebounceTimer = setTimeout(() => {
-      if (value.trim().length >= 2) {
-        searchProducts(value.trim());
-      }
-    }, 500);
+    dom.searchClearBtn?.classList.toggle("hidden", !dom.searchInput.value);
+    dom.searchHint?.classList.add("hidden");
   });
 
   dom.searchInput?.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
+    // isComposing: o Enter que só confirma a palavra no teclado não busca
+    if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
-      clearTimeout(state.searchDebounceTimer);
-      const value = dom.searchInput.value.trim();
-      if (value.length >= 2) searchProducts(value);
+      submitSearch();
     }
   });
+
+  dom.searchSubmitBtn?.addEventListener("click", submitSearch);
 
   dom.searchClearBtn?.addEventListener("click", () => {
     if (dom.searchInput) dom.searchInput.value = "";
     dom.searchClearBtn.classList.add("hidden");
+    dom.searchHint?.classList.add("hidden");
     dom.searchInput?.focus();
   });
+}
+
+function submitSearch() {
+  const value = dom.searchInput?.value.trim() || "";
+  if (value.length < 2) {
+    dom.searchHint?.classList.remove("hidden");
+    dom.searchInput?.focus();
+    return;
+  }
+  if (state.searching) return; // Enter ou toque repetido
+  dom.searchInput.blur(); // fecha o teclado no celular
+  searchProducts(value);
 }
 
 function handleAddToCart() {
@@ -420,6 +431,7 @@ async function loadProducts(categoryId) {
 // ============================================================
 
 async function searchProducts(query) {
+  state.searching = true;
   try {
     showLoading(true);
 
@@ -445,6 +457,7 @@ async function searchProducts(query) {
     console.error("Erro ao buscar produtos:", error);
     showError(`Erro ao buscar produtos: ${error.message}`);
   } finally {
+    state.searching = false;
     showLoading(false);
   }
 }

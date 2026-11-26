@@ -140,7 +140,7 @@ app.get("/api/tracking", (req, res) => {
 
 app.use(createSendWebviewRouter({ getVtexStores: () => VTEX_STORES }));
 // API de consulta do acompanhamento (app da Zendesk), com Bearer ANALYTICS_API_SECRET
-app.use("/api/analytics", createAnalyticsRouter());
+app.use("/api/analytics", createAnalyticsRouter({ getVtexStores: () => VTEX_STORES }));
 
 // ======================================================
 // CATÁLOGO DE PRODUTOS (VTEX)

@@ -13,7 +13,7 @@ Este documento é a fonte única do que o **backend do webview** (repositório `
 - **Taxas:** números de 0 a 1 (ou `null` se o denominador for 0). O app formata em %.
 - **Paginação:** por cursor (`limit` de 1 a 100, padrão 50; `next_cursor` opaco ou `null`).
 - **Limite de uso:** 60 requisições por minuto por segredo (`429 RATE_LIMITED`).
-- **Sem dados pessoais** além de `customer_name`. Pedido só como hash, com uma única exceção: o número do pedido em `GET /sends/:sendId` (seção 5.5).
+- **Sem dados pessoais** além de `customer_name`. Pedido só como hash, com uma única exceção: o número do pedido em `GET /sends/:sendId` (seção 5.5) e em `GET /sends/:sendId/order` (5.5.1).
 
 ## 2. Definições
 
@@ -23,7 +23,7 @@ Este documento é a fonte única do que o **backend do webview** (repositório `
 | **Clique** | Existe uma sessão (`flow_sessions`) ligada ao `send_id`: a webview abriu e carregou. |
 | **Sem clique** | Envio bem-sucedido sem sessão. |
 | **Concluído** | `reverse`: evento `completed` (reversa criada). `catalog`: primeiro `add_to_cart_clicked`. `tracking`: sessão aberta (não há etapa final). |
-| **Status da sessão** | `completed`, `handoff` (pediu atendente), `error` (último evento foi `error_shown` ou a sessão terminou na tela final de erro, `last_step = error`), `abandoned` (último evento `abandoned` ou parada há mais de 30 min), `in_progress`. |
+| **Status da sessão** | `completed`, `handoff` (pediu atendente), `not_eligible` (recusa por regra de negócio: o último veredito da sessão foi `eligible = false` ou aviso `ORDER_NOT_ELIGIBLE`/`NO_REASONS_FOR_TYPE`, sem falha de serviço depois; **não é erro**), `error` (último evento foi `error_shown` ou a sessão terminou na tela final de erro, `last_step = error`), `abandoned` (último evento `abandoned` ou parada há mais de 30 min), `in_progress`. |
 | **Carrinho** | Clique no link de adicionar ao carrinho da VTEX. **Não** confirma que o item ficou no carrinho nem compra. |
 | **Taxa de clique** | `clicados / (enviados com sucesso)`. |
 | **Taxa de conclusão** | duas versões: sobre clicados e sobre enviados. |
@@ -57,11 +57,11 @@ Etapas do `reverse` (ordem): `start, identify, items, reasons, address, retentio
 
 ## 4. Rótulos em português (a API devolve `label` junto da chave)
 
-- **Etapas:** `start` Início · `identify` Identificação · `items` Itens · `reasons` Motivo · `address` Endereço · `retention` Vale-compras · `shipping` Envio · `refund` Reembolso · `summary` Resumo · `result` Resultado · `categories` Categorias · `products` Produtos · `details` Detalhe do produto · `submit` Envio da solicitação · `error` Tela de erro.
+- **Etapas:** `start` Início · `identify` Identificação · `items` Itens · `reasons` Motivo · `address` Endereço · `retention` Vale-compras · `shipping` Envio · `refund` Reembolso · `summary` Resumo · `result` Resultado · `categories` Categorias · `products` Produtos · `details` Detalhe do produto · `submit` Envio da solicitação · `error` Tela final (tela que encerra o fluxo com um aviso, erro ou transferência).
 - **Eventos:** `webview_opened` Abriu a webview · `step_viewed` Viu a etapa · `step_completed` Concluiu a etapa · `step_back` Voltou · `validation_error` Erro de preenchimento · `error_shown` Viu um erro · `api_call` Chamada a serviço · `photo_added` Adicionou foto · `photo_removed` Removeu foto · `ticket_created` Ticket criado · `reverse_created` Solicitação criada · `completed` Concluiu · `handoff_requested` Pediu atendente · `abandoned` Saiu da webview · `category_selected` Escolheu categoria · `search_performed` Pesquisou · `product_viewed` Viu produto · `variation_selected` Escolheu tamanho/cor · `add_to_cart_clicked` Clicou em adicionar ao carrinho.
 - **Erros** (`error_code`): `TEMPORARY_FAILURE` Falha temporária no Troque · `ORDER_NOT_FOUND` Pedido não encontrado · `ORDER_NOT_ELIGIBLE` Pedido não elegível · `VALIDATION_FAILED` Dados inválidos · `PHOTO_REQUIRED` Foto obrigatória · `PHOTO_UPLOAD_FAILED` Falha ao enviar foto · `SESSION_EXPIRED` Sessão expirada · `UNAUTHORIZED` Token do Troque inválido · `RATE_LIMITED` Limite de uso · `CREATION_UNCONFIRMED` Criação não confirmada · `MESSAGE_NOT_POSTED` Mensagem final não postada · `HANDOFF_REQUIRED` Motivo vai para atendente · `NO_REASONS_FOR_TYPE` Sem opção de troca ou devolução · `TOO_MANY_ATTEMPTS` Muitas tentativas de localizar o pedido · `UNKNOWN_ERROR` Erro com código não reconhecido (o texto original segue mascarado em `meta.upstream_code`/`meta.detail`) · código desconhecido: mostrar o próprio código.
 - **Resultados** (`outcome`): `approved_with_shipping` Aprovada, com envio · `approved_without_shipping` Aprovada, sem envio contratado · `pending_analysis` Em análise · `approved_shipping_failed` Aprovada, envio falhou.
-- **Status:** `completed` Concluído · `handoff` Pediu atendente · `error` Terminou com erro · `abandoned` Abandonou · `in_progress` Em andamento · `not_clicked` Sem clique · `send_failed` Falha no envio.
+- **Status:** `completed` Concluído · `handoff` Pediu atendente · `error` Terminou com erro · `not_eligible` Não elegível · `abandoned` Abandonou · `in_progress` Em andamento · `not_clicked` Sem clique · `send_failed` Falha no envio.
 
 ## 5. Endpoints
 
@@ -75,14 +75,14 @@ Etapas do `reverse` (ordem): `start, identify, items, reasons, address, retentio
     "sends": 320, "send_failed": 7, "clicked": 190, "not_clicked": 123,
     "click_rate": 0.607, "completed": 45,
     "completion_rate_of_clicked": 0.237, "completion_rate_of_sent": 0.144,
-    "handoff": 22, "errors": 21, "avg_duration_seconds": 214
+    "handoff": 22, "errors": 21, "not_eligible": 9, "avg_duration_seconds": 214
   },
   "by_flow":  [ { "flow": "reverse", "...mesmos campos de totals": 0 } ],
   "by_brand": [ { "brand": "mizuno", "...mesmos campos de totals": 0 } ],
   "daily":    [ { "date": "2026-11-18", "sends": 40, "clicked": 24, "completed": 6 } ]
 }
 ```
-Base de cálculo: `v_sends` filtrado por `sent_at` no período.
+Base de cálculo: `v_sends` filtrado por `sent_at` no período. `errors` conta sessões com algum erro e **exclui** as de status `not_eligible`, contadas à parte em `not_eligible`.
 
 ### 5.3 `GET /funnel?flow=reverse|catalog&from&to&brand`
 `flow` é obrigatório. Primeiras duas linhas são sempre "Enviados" e "Abriram".
@@ -102,7 +102,7 @@ Base de cálculo: `v_sends` filtrado por `sent_at` no período.
 ### 5.4 `GET /sends?from&to&brand&flow&click_status&status&q&limit&cursor`
 Lista principal para os analistas: **todo botão enviado**, com o que aconteceu depois.
 - `click_status`: `clicked | not_clicked | send_failed`. `status`: status da sessão (seção 2).
-- `q`: ID da conversa exato, **ou** número do pedido (o servidor calcula o mesmo hash e compara com `order_hash`), **ou** parte do nome do cliente (mínimo 3 caracteres).
+- `q`: ID da conversa exato, **ou** número do pedido (o servidor compara o hash com `order_hash` e também o número gravado do pedido, inclusive o não localizado; o número não sai na lista), **ou** parte do nome do cliente (mínimo 3 caracteres).
 ```json
 {
   "items": [
@@ -138,7 +138,8 @@ Na troca/devolução (`flow = reverse`), a resposta também traz o pedido e os p
 
 | Campo | Tipo | Regra |
 |---|---|---|
-| `order_number` | texto ou `null` | Número do pedido que o cliente selecionou. |
+| `order_number` | texto ou `null` | Número do pedido consultado pelo cliente. Gravado já na digitação, mesmo que o Troque não o localize ou a consulta falhe. Valores que parecem CPF ou CNPJ, ou repetem a identificação digitada, não são gravados. |
+| `order_verified` | booleano ou `null` | `true`: o Troque confirmou o pedido. `false`: número apenas digitado (não localizado ou consulta com falha); o app avisa. Um número não confirmado nunca substitui um confirmado da mesma sessão. `null` quando não há `order_number`. |
 | `items` | lista | Somente os produtos selecionados pelo cliente, não o pedido inteiro. |
 | `items[].title` | texto | Obrigatório em cada item. |
 | `items[].sku` | texto ou `null` | |
@@ -146,7 +147,32 @@ Na troca/devolução (`flow = reverse`), a resposta também traz o pedido e os p
 | `items[].image_url` | texto ou `null` | URL `https://` pública, sem token nem dado do cliente. Outros formatos são ignorados pelo app. |
 
 - Os campos são opcionais: ausentes, `null` ou lista vazia (outros fluxos, sem clique, pedido ainda não identificado, nenhum item selecionado ou envios anteriores a esta mudança), o app não mostra o bloco.
-- `order_number` e `items` existem **somente** neste endpoint. Não entram em 5.4, 5.6, no CSV (5.9), no `meta` dos eventos nem em logs. No `meta`, o pedido continua só como `order_hash`.
+- `order_number` e `items` existem **somente** neste endpoint (e o número também em 5.5.1). Não entram em 5.4, 5.6, no CSV (5.9), no `meta` dos eventos nem em logs. No `meta`, o pedido continua só como `order_hash`.
+
+### 5.5.1 `GET /sends/:sendId/order`
+Pedido consultado **na VTEX, na hora** (nada é gravado), usando o número guardado do envio (5.5) e as chaves da marca no servidor. O app chama só este endpoint, nunca a VTEX.
+```json
+{
+  "order_number": "1000000000000-01",
+  "order_verified": true,
+  "reason": null,
+  "order": {
+    "order_id": "1000000000000-01", "status": "invoiced", "status_label": "Faturado",
+    "created_at": "ISO", "invoiced_at": "ISO",
+    "totals": { "items_cents": 17999, "discounts_cents": -6300, "shipping_cents": 986, "total_cents": 12685 },
+    "items": [ { "name": "Tênis Demo", "variation": "40 Preto", "ref_id": "0000000-001-40", "quantity": 1,
+                 "price_cents": 11699, "list_price_cents": 24999, "image_url": "https://exemplo.com/produto.jpg" } ],
+    "shipping": { "courier": "Transportadora Demo", "method": "Normal", "estimate_at": "ISO" },
+    "packages": [ { "courier": "Transportadora Demo", "tracking_number": "DEMO123", "tracking_url": "https://exemplo.com/rastreio", "delivered_at": "ISO" } ],
+    "payments": [ { "method": "Mastercard", "installments": 2 } ]
+  }
+}
+```
+- `reason`: `null` (há `order`) · `no_order_number` (outro fluxo, sem clique ou número não guardado) · `not_found` (a VTEX não achou) · `not_configured` (marca sem chaves) · `forbidden` (chave sem permissão de leitura de pedidos) · `unavailable` (falha ou demora da VTEX). Todos respondem `200`, com `order: null`.
+- Valores em **centavos** (inteiros). `price_cents` é o preço unitário pago. Qualquer campo pode vir `null`.
+- **Lista fechada:** só os campos acima saem. Nunca documento, nome, e-mail, telefone, endereço, dados de cartão ou de transação, nota fiscal (XML, chave, link) nem nomes de campanhas ou descontos.
+- `order_verified: false`: o número foi só digitado pelo cliente; o pedido encontrado **pode não ser dele**, e o app avisa.
+- `image_url` e `tracking_url`: `https://` pública, sem token na consulta da URL.
 
 ### 5.6 `GET /sessions/:sessionId`
 ```json
@@ -165,7 +191,7 @@ Eventos em ordem cronológica (`ts`, depois `id`). `meta` já sem chaves bloquea
 ### 5.7 `GET /reports/reverse?from&to&brand`
 ```json
 {
-  "totals": { "sessions": 100, "completed": 21, "handoff": 22, "errors": 21, "avg_seconds_to_complete": 305, "p90_seconds_to_complete": 640 },
+  "totals": { "sessions": 100, "completed": 21, "handoff": 22, "errors": 21, "not_eligible": 9, "avg_seconds_to_complete": 305, "p90_seconds_to_complete": 640 },
   "by_type":    [ { "key": "troca", "count": 12 } ],
   "by_reason":  [ { "key": "Defeito", "count": 9 } ],
   "by_outcome": [ { "key": "approved_with_shipping", "label": "Aprovada, com envio", "count": 8 } ],
@@ -173,9 +199,14 @@ Eventos em ordem cronológica (`ts`, depois `id`). `meta` já sem chaves bloquea
   "photos":     { "sessions_with_photos": 9 },
   "handoff_by_reason": [ { "key": "Solicitação fora do prazo", "count": 11 } ],
   "errors_by_code": [ { "key": "TEMPORARY_FAILURE", "label": "Falha temporária no Troque", "count": 7 } ],
-  "by_brand":   [ { "key": "mizuno", "sessions": 40, "completed": 9 } ]
+  "by_brand":   [ { "key": "mizuno", "sessions": 40, "completed": 9 } ],
+  "not_eligible_by_reason": [ { "key": "active_request", "label": "Já tem solicitação em andamento", "count": 5 } ]
 }
 ```
+`not_eligible_by_reason`: motivo da recusa das sessões `not_eligible`. Chaves conhecidas: `active_request` Já tem solicitação em andamento · `marketplace` Compra feita em marketplace · `order_situation` Situação do pedido não permite troca · `deadline` Prazo de troca encerrado · `no_reasons` Sem opção de troca ou devolução · `not_eligible` Pedido não elegível · `desconhecido` Sem motivo informado · motivo novo: a própria chave (mascarada). `errors_by_code` não inclui recusas.
+
+Nos eventos, um `error_shown` com `ORDER_NOT_ELIGIBLE` ou `NO_REASONS_FOR_TYPE` vem com `event_label` "Viu o aviso de pedido não elegível".
+
 Lista `reasons` e códigos podem crescer: devolva as 20 maiores e agrupe o resto em `"key": "outros"`.
 
 ### 5.8 `GET /reports/catalog?from&to&brand`

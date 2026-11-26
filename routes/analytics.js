@@ -11,6 +11,7 @@ const crypto = require("crypto");
 const express = require("express");
 const { createAnalytics, ApiError, toCsv } = require("../lib/analytics");
 const { createRateLimiter } = require("../lib/rateLimit");
+const { createVtexOrders } = require("../lib/vtex-orders");
 
 const MINUTE = 60 * 1000;
 const RATE_LIMIT_PER_MINUTE = 60;
@@ -24,9 +25,9 @@ function sendError(res, status, code, error) {
   return res.status(status).json({ success: false, code, error });
 }
 
-function createAnalyticsRouter({ db = require("../lib/db"), now = () => Date.now(), env = process.env } = {}) {
+function createAnalyticsRouter({ db = require("../lib/db"), now = () => Date.now(), env = process.env, getVtexStores = () => ({}), vtex } = {}) {
   const router = express.Router();
-  const analytics = createAnalytics({ db, now });
+  const analytics = createAnalytics({ db, now, vtex: vtex || createVtexOrders({ getStores: getVtexStores, env, now }) });
   const secretLimiter = createRateLimiter({ windowMs: MINUTE, max: RATE_LIMIT_PER_MINUTE, now });
   const ipLimiter = createRateLimiter({ windowMs: MINUTE, max: IP_LIMIT_PER_MINUTE, now });
 
@@ -87,6 +88,7 @@ function createAnalyticsRouter({ db = require("../lib/db"), now = () => Date.now
   router.get("/funnel", handle((req) => analytics.funnel(req.query)));
   router.get("/sends", handle((req) => analytics.sends(req.query)));
   router.get("/sends/:sendId", handle((req) => analytics.sendDetail(req.params.sendId)));
+  router.get("/sends/:sendId/order", handle((req) => analytics.sendOrder(req.params.sendId)));
   router.get("/sessions/:sessionId", handle((req) => analytics.sessionDetail(req.params.sessionId)));
   router.get("/reports/reverse", handle((req) => analytics.reverseReport(req.query)));
   router.get("/reports/catalog", handle((req) => analytics.catalogReport(req.query)));

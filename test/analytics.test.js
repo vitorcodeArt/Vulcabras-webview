@@ -24,9 +24,9 @@ function fakeDb(handler = () => []) {
   };
 }
 
-async function start(t, { db = fakeDb(), env = { ANALYTICS_API_SECRET: SECRET }, now = () => NOW } = {}) {
+async function start(t, { db = fakeDb(), env = { ANALYTICS_API_SECRET: SECRET }, now = () => NOW, vtex } = {}) {
   const app = express();
-  app.use("/api/analytics", createAnalyticsRouter({ db, env, now }));
+  app.use("/api/analytics", createAnalyticsRouter({ db, env, now, vtex }));
   const server = await new Promise((resolve) => {
     const s = app.listen(0, "127.0.0.1", () => resolve(s));
   });
@@ -261,19 +261,24 @@ test("sends: busca q por conversa, hash do pedido e nome (com % e _ escapados)",
 
   await get(`/sends?q=${encodeURIComponent("# 1664284820905-01")}`);
   const { hashOrderNumber } = require("../lib/tracking");
-  const byOrder = db.calls[0];
+  // a lista é a consulta em v_sends; antes dela há a busca do pedido gravado
+  const lists = () => db.calls.filter((c) => c.text.includes("v_sends"));
+  const lookup = db.calls.find((c) => c.text.includes("from flow_session_orders where order_number"));
+  assert.deepEqual(lookup.params, ["1664284820905-01"]);
+  assert.ok(!lookup.text.includes("1664284820905"));
+  const byOrder = lists()[0];
   assert.ok(byOrder.text.includes("order_hash ="));
   assert.ok(byOrder.params.includes(hashOrderNumber("1664284820905-01")));
   assert.ok(!byOrder.text.includes("1664284820905") && !byOrder.params.includes("1664284820905-01"));
 
   await get(`/sends?q=${encodeURIComponent("50%_x")}`);
-  const byName = db.calls[1];
+  const byName = lists()[1];
   assert.ok(byName.text.includes("v.conversation_id ="));
   assert.ok(byName.text.includes("ilike"));
   assert.ok(byName.params.includes("%50\\%\\_x%"));
 
   await get("/sends?q=ab"); // menos de 3 caracteres: só conversa exata
-  assert.ok(!db.calls[2].text.includes("ilike"));
+  assert.ok(!lists()[2].text.includes("ilike"));
   assert.equal(escapeLike("a%b_c\\"), "a\\%b\\_c\\\\");
 });
 
@@ -338,10 +343,19 @@ test("sessions/:id: sessão, envio e eventos", async (t) => {
 test("reports/reverse: monta o contrato, top 20 + outros e motivo da transferência nos dois campos", async (t) => {
   const manyReasons = Array.from({ length: 23 }, (_, i) => ({ key: `Motivo ${i}`, count: 30 - i }));
   const db = fakeDb((text) => {
+    // a consulta de recusas também cita error_shown: precisa vir antes
+    if (text.includes("as refusal") || text.includes(") refusal on true"))
+      return [
+        { key: "alreadyHaveActiveExchangeRequest contactSAC", count: 4 },
+        { key: "Favor utilizar a central de trocas do Marketplace.", count: 3 },
+        { key: "alreadyHaveActiveRefundRequest", count: 1 },
+        { key: "codigoNovo", count: 2 },
+        { key: "desconhecido", count: 1 },
+      ];
     if (text.includes("handoff_requested")) return [{ key: "Solicitação fora do prazo", count: 11 }];
     if (text.includes("error_shown")) return [{ key: "TEMPORARY_FAILURE", count: 7 }];
     if (text.includes("as offered")) return [{ offered: 14, accepted: 6, with_photos: 9 }];
-    if (text.includes("percentile_cont")) return [{ sessions: 100, completed: 21, handoff: 22, errors: 21, avg_s: 305, p90_s: 640 }];
+    if (text.includes("percentile_cont")) return [{ sessions: 100, completed: 21, handoff: 22, errors: 21, not_eligible: 11, avg_s: 305, p90_s: 640 }];
     if (text.includes("request_type as key")) return [{ key: "troca", count: 12 }];
     if (text.includes("reason as key")) return manyReasons;
     if (text.includes("outcome as key")) return [{ key: "approved_with_shipping", count: 8 }];
@@ -351,7 +365,16 @@ test("reports/reverse: monta o contrato, top 20 + outros e motivo da transferên
   const { get } = await start(t, { db });
   const { data } = await (await get("/reports/reverse")).json();
 
-  assert.deepEqual(data.totals, { sessions: 100, completed: 21, handoff: 22, errors: 21, avg_seconds_to_complete: 305, p90_seconds_to_complete: 640 });
+  assert.deepEqual(data.totals, { sessions: 100, completed: 21, handoff: 22, errors: 21, not_eligible: 11, avg_seconds_to_complete: 305, p90_seconds_to_complete: 640 });
+  assert.deepEqual(data.not_eligible_by_reason, [
+    { key: "active_request", label: "Já tem solicitação em andamento", count: 5 },
+    { key: "marketplace", label: "Compra feita em marketplace", count: 3 },
+    { key: "codigoNovo", label: "codigoNovo", count: 2 },
+    { key: "desconhecido", label: "Sem motivo informado", count: 1 },
+  ]);
+  // recusa não entra em "erros": nem no total nem na lista por código
+  assert.ok(db.calls.some((c) => c.text.includes("error_count > 0 and status <> 'not_eligible'")));
+  assert.ok(db.calls.some((c) => c.text.includes("not in ('ORDER_NOT_ELIGIBLE', 'NO_REASONS_FOR_TYPE')")));
   assert.deepEqual(data.retention, { offered: 14, accepted: 6, accept_rate: 0.4286 });
   assert.deepEqual(data.photos, { sessions_with_photos: 9 });
   assert.deepEqual(data.by_outcome[0], { key: "approved_with_shipping", label: "Aprovada, com envio", count: 8 });
@@ -445,7 +468,7 @@ test("rótulos do contrato e código desconhecido mostra o próprio código", ()
 
 test("rótulos: etapas submit e error têm nome em português; chave desconhecida mostra a própria chave", () => {
   const labels = require("../lib/analytics-labels");
-  assert.equal(labels.stepLabel("error"), "Tela de erro");
+  assert.equal(labels.stepLabel("error"), "Tela final");
   assert.equal(labels.stepLabel("submit"), "Envio da solicitação");
   assert.equal(labels.stepLabel("etapa_nova"), "etapa_nova");
   assert.equal(labels.errorLabel("UNKNOWN_ERROR"), "Erro com código não reconhecido");
@@ -500,4 +523,58 @@ test("sem a migração 003 o detalhe continua funcionando", async (t) => {
   const res = await get(`/sends/${SEND_ID}`);
   assert.equal(res.status, 200);
   assert.ok(!("order_number" in (await res.json()).data));
+});
+
+test("recusa por regra de negócio: rótulos, filtro de status e totais sem contar como erro", async (t) => {
+  assert.equal(labels.statusLabel("not_eligible"), "Não elegível");
+  assert.equal(labels.ineligibilityReason("orderUnauthorizedSituation").label, "Situação do pedido não permite troca");
+  assert.equal(labels.ineligibilityReason("expiredExchangeReturnDeadlines").label, "Prazo de troca encerrado");
+  assert.equal(labels.ineligibilityReason("NO_REASONS_FOR_TYPE").label, "Sem opção de troca ou devolução");
+  assert.deepEqual(labels.ineligibilityReason(""), { key: "desconhecido", label: "Sem motivo informado" });
+  assert.deepEqual(labels.ineligibilityReason("ORDER_NOT_ELIGIBLE"), { key: "not_eligible", label: "Pedido não elegível" });
+
+  const db = fakeDb(() => []);
+  const { get } = await start(t, { db });
+  assert.equal((await get("/sends?status=not_eligible")).status, 200);
+  assert.equal((await get("/summary")).status, 200);
+  assert.ok(db.calls.some((c) => c.text.includes("error_count > 0 and eff_status <> 'not_eligible'")));
+  assert.ok(db.calls.some((c) => c.text.includes("eff_status = 'not_eligible')::int as not_eligible")));
+});
+
+test("evento de recusa tem rótulo próprio; erro comum continua 'Viu um erro'", async (t) => {
+  const event = (id, error_code) => ({ id, ts: new Date("2026-11-12T12:00:00Z"), source: "client", step: "identify", event: "error_shown", duration_ms: null, error_code, meta: null });
+  const db = fakeDb((text) => {
+    if (text.includes("from flow_events")) return [event(1, "ORDER_NOT_ELIGIBLE"), event(2, "TEMPORARY_FAILURE")];
+    if (text.includes("flow_session_orders")) return [];
+    return [sendRow({ eff_status: "not_eligible" })];
+  });
+  const { get } = await start(t, { db });
+  const { data } = await (await get(`/sends/${SEND_ID}`)).json();
+  assert.equal(data.session_status, "not_eligible");
+  assert.equal(data.status_label, "Não elegível");
+  assert.deepEqual(data.events.map((e) => e.event_label), ["Viu o aviso de pedido não elegível", "Viu um erro"]);
+});
+
+test("sends/:id/order: usa o número guardado, a marca do envio e devolve o resultado da VTEX", async (t) => {
+  const asked = [];
+  const vtex = { lookup: async (brand, number) => (asked.push([brand, number]), { order: { order_id: number }, reason: null }) };
+  const db = orderDb(sendRow(), [{ ...ORDER_ROW, verified: false }]);
+  const { get } = await start(t, { db, vtex });
+  const res = await get(`/sends/${SEND_ID}/order`);
+  assert.equal(res.status, 200);
+  const { data } = await res.json();
+  assert.deepEqual(data, { order_number: "1000000000001-01", order_verified: false, reason: null, order: { order_id: "1000000000001-01" } });
+  assert.deepEqual(asked, [[sendRow().brand, "1000000000001-01"]]);
+});
+
+test("sends/:id/order: sem número, outro fluxo ou sem clique não consulta a VTEX; exige o segredo", async (t) => {
+  const vtex = { lookup: async () => assert.fail("não deveria consultar") };
+  for (const db of [orderDb(sendRow(), []), orderDb(sendRow({ flow: "catalog" }), [ORDER_ROW]), orderDb(sendRow({ click_status: "not_clicked", session_id: null }), [ORDER_ROW])]) {
+    const { get } = await start(t, { db, vtex });
+    const { data } = await (await get(`/sends/${SEND_ID}/order`)).json();
+    assert.deepEqual(data, { order_number: null, order_verified: null, reason: "no_order_number", order: null });
+  }
+  const { get } = await start(t, { db: fakeDb(() => []), vtex });
+  assert.equal((await get(`/sends/${SEND_ID}/order`)).status, 404);
+  assert.equal((await get("/sends/x/order")).status, 400);
 });
