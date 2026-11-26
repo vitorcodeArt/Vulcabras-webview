@@ -301,7 +301,7 @@ test("sends/:id: valida o uuid, 404 e eventos da sessão com meta filtrada", asy
   assert.equal(data.events[0].event_label, "Viu a etapa");
   assert.deepEqual(data.events[0].meta, { reason: "Defeito" });
   assert.equal(data.events[1].error_label, "Foto obrigatória");
-  assert.ok(db.calls.at(-1).text.includes("order by ts, id"));
+  assert.ok(db.calls.some((c) => c.text.includes("order by ts, id")));
 });
 
 test("sends/:id sem clique devolve lista de eventos vazia", async (t) => {
@@ -450,4 +450,54 @@ test("rótulos: etapas submit e error têm nome em português; chave desconhecid
   assert.equal(labels.stepLabel("etapa_nova"), "etapa_nova");
   assert.equal(labels.errorLabel("UNKNOWN_ERROR"), "Erro com código não reconhecido");
   assert.equal(labels.errorLabel("NO_REASONS_FOR_TYPE"), "Sem opção de troca ou devolução");
+});
+
+// ---------- pedido e produtos (só no detalhe do envio) ----------
+
+const ORDER_ROW = { order_number: "1000000000001-01", items: [{ title: "Tênis Demo", sku: "SKU-1", size: null, image_url: null, extra: "não sai" }] };
+const orderDb = (send, order) =>
+  fakeDb((text) => {
+    if (text.includes("flow_session_orders")) return order;
+    if (text.includes("from flow_events")) return [];
+    return [send];
+  });
+
+test("sends/:id de troca traz pedido e itens selecionados", async (t) => {
+  const db = orderDb(sendRow(), [ORDER_ROW]);
+  const { get } = await start(t, { db });
+  const { data } = await (await get(`/sends/${SEND_ID}`)).json();
+  assert.equal(data.order_number, "1000000000001-01");
+  assert.deepEqual(data.items, [{ title: "Tênis Demo", sku: "SKU-1", size: null, image_url: null }]);
+  assert.deepEqual(db.calls.find((c) => c.text.includes("flow_session_orders")).params, [SEND_ID, SESSION_ID]);
+});
+
+test("sends/:id sem pedido identificado: campos vazios", async (t) => {
+  const { get } = await start(t, { db: orderDb(sendRow(), []) });
+  const { data } = await (await get(`/sends/${SEND_ID}`)).json();
+  assert.equal(data.order_number, null);
+  assert.deepEqual(data.items, []);
+});
+
+test("outros fluxos, sem clique e lista de envios não consultam o pedido", async (t) => {
+  for (const send of [sendRow({ flow: "catalog" }), sendRow({ click_status: "not_clicked", session_id: null })]) {
+    const db = orderDb(send, [ORDER_ROW]);
+    const { get } = await start(t, { db });
+    const { data } = await (await get(`/sends/${SEND_ID}`)).json();
+    assert.ok(!("order_number" in data) && !("items" in data));
+    const list = await (await get("/sends")).json();
+    assert.ok(!JSON.stringify(list).includes("order_number"));
+    assert.ok(db.calls.every((c) => !c.text.includes("flow_session_orders")));
+  }
+});
+
+test("sem a migração 003 o detalhe continua funcionando", async (t) => {
+  const db = fakeDb((text) => {
+    if (text.includes("flow_session_orders")) throw Object.assign(new Error("x"), { code: "42P01" });
+    if (text.includes("from flow_events")) return [];
+    return [sendRow()];
+  });
+  const { get } = await start(t, { db });
+  const res = await get(`/sends/${SEND_ID}`);
+  assert.equal(res.status, 200);
+  assert.ok(!("order_number" in (await res.json()).data));
 });

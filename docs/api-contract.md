@@ -13,7 +13,7 @@ Este documento é a fonte única do que o **backend do webview** (repositório `
 - **Taxas:** números de 0 a 1 (ou `null` se o denominador for 0). O app formata em %.
 - **Paginação:** por cursor (`limit` de 1 a 100, padrão 50; `next_cursor` opaco ou `null`).
 - **Limite de uso:** 60 requisições por minuto por segredo (`429 RATE_LIMITED`).
-- **Sem dados pessoais** além de `customer_name`. Pedido só como hash.
+- **Sem dados pessoais** além de `customer_name`. Pedido só como hash, com uma única exceção: o número do pedido em `GET /sends/:sendId` (seção 5.5).
 
 ## 2. Definições
 
@@ -123,6 +123,30 @@ Campos de troca (`outcome`, `request_type`, `reason`, `ticket_id`) vêm `null` n
 
 ### 5.5 `GET /sends/:sendId`
 Mesmo item de 5.4 mais `events` da sessão (lista vazia se não houve clique). O app abre este detalhe para qualquer linha da lista.
+
+Na troca/devolução (`flow = reverse`), a resposta também traz o pedido e os produtos que o cliente selecionou:
+```json
+{
+  "...item de 5.4": null,
+  "order_number": "1234567890",
+  "items": [
+    { "title": "Tênis Demo Preto", "sku": "0000000-001-37", "size": "37", "image_url": "https://exemplo.com/produto.jpg" }
+  ],
+  "events": []
+}
+```
+
+| Campo | Tipo | Regra |
+|---|---|---|
+| `order_number` | texto ou `null` | Número do pedido que o cliente selecionou. |
+| `items` | lista | Somente os produtos selecionados pelo cliente, não o pedido inteiro. |
+| `items[].title` | texto | Obrigatório em cada item. |
+| `items[].sku` | texto ou `null` | |
+| `items[].size` | texto ou `null` | Só o valor (`"37"`); o app acrescenta o rótulo. |
+| `items[].image_url` | texto ou `null` | URL `https://` pública, sem token nem dado do cliente. Outros formatos são ignorados pelo app. |
+
+- Os campos são opcionais: ausentes, `null` ou lista vazia (outros fluxos, sem clique, pedido ainda não identificado, nenhum item selecionado ou envios anteriores a esta mudança), o app não mostra o bloco.
+- `order_number` e `items` existem **somente** neste endpoint. Não entram em 5.4, 5.6, no CSV (5.9), no `meta` dos eventos nem em logs. No `meta`, o pedido continua só como `order_hash`.
 
 ### 5.6 `GET /sessions/:sessionId`
 ```json

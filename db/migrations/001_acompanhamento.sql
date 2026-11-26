@@ -6,8 +6,9 @@
 -- Pode rodar mais de uma vez: os comandos são idempotentes.
 --
 -- Privacidade: nada de CPF, e-mail, telefone, endereço, chave PIX ou dados
--- bancários. O pedido entra só como hash (order_hash). O único dado pessoal
--- é o nome de exibição, isolado em conversation_contacts para poder ser
+-- bancários. Nestas tabelas o pedido entra só como hash (order_hash); a única
+-- exceção ao número do pedido está na migração 003 (flow_session_orders).
+-- O nome de exibição fica isolado em conversation_contacts para poder ser
 -- apagado por conversa (veja purge_old_flow_data e o script forget-conversation).
 -- =====================================================================
 
